@@ -26,6 +26,11 @@ const server = http.createServer((req, res) => {
     var session_cookie = 'session_id=' + uid+'; path=/; Secure; Max-Age=9000; SameSite=None';
 
     switch (req.url) {
+        case '/journey/find':
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({journey: "TODO"}));
+            break;
         case '/user/signout':
             if(typeof session_data.data.user_key != 'undefined') {
                 try {

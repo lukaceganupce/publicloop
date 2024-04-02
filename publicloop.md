@@ -1,368 +1,372 @@
-# PUBLICLOOP (v0.3.0)
-Vývoj skvělé, neuvěřitelné, úžasné a spektakulární aplikace pro vyhledávání spojení mezi bodem A a B ve veřejném prostoru krok za krokem. 
+# PUBLICLOOP (v0.4.0)
+Vývoj skvělé, neuvěřitelné, úžasné a spektakulární aplikace pro vyhledávání spojení mezi bodem A a B ve veřejném prostoru krok za krokem.
 
+## Navigace na stránce Mapa
+Na stránku {publicloop_root}/app/frondend/map.html si přidáme respozivní navigační pruh. Pro jednoduchost zvolíme komponentu Navbar z frameworku Boostrap (https://getbootstrap.com/docs/5.3/components/navbar/).
 
-## Automatický restart Backend serveru
-Pro otestování každé změny zdrojových souborů backendu aplikace je nutné ukončit běh node.js skriptu a skript znovu spustit. Pro automatický restart backend serveru vyvolaný změnou zdrojového kódu použijeme nodemoon.
+    <nav class="navbar navbar-dark bg-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">PUBLICLOOP</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" 
+                    data-bs-target="#offcanvasDarkNavbar" aria-controls="offcanvasDarkNavbar"
+                    aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="offcanvas offcanvas-end text-bg-dark" tabindex="-1" 
+                id="offcanvasDarkNavbar" aria-labelledby="offcanvasDarkNavbarLabel">
+                <div class="offcanvas-header">
+                    <h5 class="offcanvas-title" id="offcanvasDarkNavbarLabel">PUBLICLOOP</h5>
+                    <button type="button" class="btn-close btn-close-white" 
+                        data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                </div>
+                <div class="offcanvas-body">
+                    <ul class="navbar-nav justify-content-end flex-grow-1 pe-3">
+                        <li class="nav-item">
+                            <a class="nav-link active" aria-current="page" href="#" 
+                                id="signOut">Sign out</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
 
-    {publicloop_root}/app/backend/npm install nodemon
+## Práce s mapovým podkladem OpenLayer
+Pro práci s mapovými podklady použijeme knihovnu OpenLayer https://openlayers.org/. Nejdříve si přidáme příslušnou knihovnu do hlavičky souboru {publicloop_root}/app/frondend/map.html.
 
-Dále si do souboru {publicloop_root}/app/backend/package.json přidáme do sekce skript položky start a dev.
+    <head>
+        ...
+        <script src="https://cdn.jsdelivr.net/npm/ol@v9.0.0/dist/ol.js"></script>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.0.0/ol.css">
+        ...
+    </head>
 
-    ...
-    "scripts": {
-      "start": "node index.js",
-      "dev": "npx nodemon index.js",
-      "test": "echo \"Error: no test specified\" && exit 1"
-    },
-    ...
+Dále si do souboru {publicloop_root}/app/frondend/map.html vložíme element map, do kterého budeme vykreslovat mapu.
 
-> Backend aplikace lze spustit v módu bez automatického restartu (start) nebo s automatickým restartem při změně (dev).
->
->     npm run start 
->     npm run dev
+    <div id="map"></div>
 
+Element map si nastylujeme.
 
-Pro usnadnění spouštění backendu si můžeme upravit dávku {publicloop_root}/start-backend-app.bat.
-
-    @echo off
-    setlocal
-    
-    set arg=%1
-    echo PublicLoop is trying to start - please wait  ...
-    
-    if not defined arg goto :dev
-    if %arg%==start (goto start) else (goto unsupported)
-    
-    :dev
-    cd app/backend
-    npm run dev
-    goto finish
-    
-    :start
-    cd app/backend
-    npm run start
-    goto finish
-    
-    :unsupported
-    echo Unsupported argument
-    goto finish
-    
-    if errorlevel 0 goto finish
-    if errorlevel 1 goto error
-    goto finish
-    
-    :error
-    echo.
-    echo PublicLoop could not be started
-    
-    :finish
-    pause
-
-
-
-## Vytvoření relace mezi klientem a serverem
-Abychom na backendu naší aplikace mohli rozlišit jednotlivé uživatele, musíme mezi klientem a serverem vytvořit relaci, která nám pomůže překonat bezestavovost protokolu HTTP (viz https://en.wikipedia.org/wiki/HTTP#HTTP_session).
-Vytvoření relace se skládá z následujících kroků:
-1. Při zpracování každého klientského požadavku ověříme, zda klient zasílá v HTTP požadavku jedinečný identifikátor. Pokud ne, vytvoříme ho.
-2. Načteme data ze souboru, jehož název je stejný jako jedinečný identifikátor. Pokud soubor neexistuje, vytvoříme ho.
-3. Pokud jsme vygenerovali nový uid, tak ho klientovi zašleme.
-
-
-### Krok 1
-Pro načtení hlaviček HTTP požadavku si vytvoříme v souboru {publicloop_root}/app/backend/index.js funkci parseCookies.   
-
-    function parseCookies (request) {
-        const list = {};
-        const cookieHeader = request.headers?.cookie;
-        if (!cookieHeader) return list;
-    
-        cookieHeader.split(`;`).forEach(function(cookie) {
-            let [ name, ...rest] = cookie.split(`=`);
-            name = name?.trim();
-            if (!name) return;
-            const value = rest.join(`=`).trim();
-            if (!value) return;
-            list[name] = decodeURIComponent(value);
-        });
-    
-        return list;
-    }
-
-Tuto funkci použijeme pro načtení Cookie session_id. Pokud neexistuje, tak uid vytvoříme.
-
-    const crypto = require('crypto');    
-    const server = http.createServer((req, res) => {
-      let uid = null;
-      const cookies = parseCookies(req);
-      if (typeof cookies.session_id != 'undefined') {
-        uid = cookies.session_id;
-      } else {
-        uid = (crypto.randomUUID());
-      }
-    ...
-    }
-
-> Balíček crypto si musíme do aplikace doinstalovat.
->
->     npm install crypto
-
-
-### Krok 2
-Pokud existuje uid, načteme soubor uid z úložiště. Pokud neexistuje, tak soubor vytvoříme.
-
-    const fs = require('fs');
-    const path = require('path');
-    const file = path.resolve(__dirname, '..', 'tmp_session/',uid);
-    let session_data = {session_id:uid,data: {}};
-    try {
-      session_data = JSON.parse(fs.readFileSync(file, 'utf8'));
-    } catch (err) {
-      fs.writeFileSync(file, JSON.stringify(session_data), { flag: 'ax' });
-    }
-
-> Balíček fs a path si musíme do aplikace doinstalovat.
->
->     npm install fs
->     npm install path
-
-> Musíme si také na file systému vytvořit adresář {publicloop_root}/app/tmp_session. Z důvodu bezpečnosti si adresář tmp_session vytvoříme mimo publikační strom frondendu i backendu.
-
-### Krok 3
-Klientovi zašleme session_id v cookie v hlavičce HTTP odpovědi (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie).
-
-    var session_cookie = 'session_id=' + uid+'; path=/; Secure; Max-Age=9000; SameSite=None'
-    res.setHeader('Set-Cookie', session_cookie);
-
-## Řízení přístupu 
-
-### Práce s daty session souboru
-Nyní máme možnost ukládat na straně serveru klientova data (identifikována prostřednictvím UID). Příkladem může být uložení user_key do session souboru po úspěšném přihlášení uživatele do aplikace.
-
-    case '/user/signin':
-        if(typeof session_data.data.user_key != 'undefined') {
-            res.statusCode = 200;
-            res.setHeader('Content-Type', 'application/json');
-            res.setHeader('Set-Cookie', session_cookie);
-            res.end(JSON.stringify({signin: true}));
-            break;
+    <style>
+        html,
+        body {
+            margin: 0;
+            height: 100%;
         }
-    
-        var body = '';  //get request body
-        req.on('data', chunk => {
-            body += chunk.toString(); // convert Buffer to string
-        });
-        req.on('end', () => {
-            let reqData = JSON.parse(body);
-            let username = reqData.email;
-            let password = reqData.password;
-            var connection = getConn();
-            connection.query(
-                'SELECT *  FROM users WHERE email=? and password = ?',
-                [username, password],
-                function (err, results) {
-                    if (err) {
-                        res.statusCode = 500;
-                        res.setHeader('Content-Type', 'text/plain');
-                        res.end('Internal Server Error');
-                    } else {
-                        var exist = false;
-                        var user_key = null;
-                        results.forEach(function (item) {
-                            exist = true;
-                            user_key = item.user_key;
-                        });
-                        if (exist) {
-                            session_data.data ['user_key'] = user_key;
-                            fs.writeFileSync(file, JSON.stringify(session_data), {flag: ''});
-                        }
-                        var resData = {login: exist}
-                        res.statusCode = 200;
-                        res.setHeader('Content-Type', 'application/json');
-                        res.setHeader('Set-Cookie', session_cookie);
-                        res.end(JSON.stringify(resData));
-                    }
-                }
-            );
-        });
-    break;
-
-### Ověření přihlášeného uživatele na stránce signin.html
-Na stránce signin si nejdříve ověříme, jestli už není uživatel přihlášen. Vytvoříme si loader, který bude zobrazen po dobu realizace dotazu na backend. Do souboru {publicloop_root}/app/frondend/css/styles.css si vložíme následující zdrojový kód. 
-
-    #loader {
-        display: none;
-        position: absolute;
-        width: 100vw;
-        height: 100vh;
-        background:rgba(0,0,0,0.7);
-        z-index: 5000;
-    }
-    .circle {
-        position: absolute;
-        top: calc(50vh - 58px);
-        left: calc(50vw - 58px);
-        border: 16px solid #f3f3f3; /* Light grey */
-        border-top: 16px solid #3498db; /* Blue */
-        border-radius: 50%;
-        width: 120px;
-        height: 120px;
-        animation: spin 2s linear infinite;
-    }
-    
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-
-A do souboru {publicloop_root}/app/frondend/signin.html si vložíme:
-
-    <div id="loader">
-        <div class="circle"></div>
-    </div>
-
-Do souboru {publicloop_root}/app/frondend/js/app.js si přidáme obslužné funkce.
-
-    function isUserSignin(session_id) {
-        return new Promise((resolve) => {
-            if (session_id != null) {
-                fetch('http://localhost/backend/user/signin', {
-                    method: "POST",
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({})
-                })
-                    .then((response) => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error, status = ${response.status}`);
-                        }
-                        return response.text();
-                    })
-                    .then((text) => {
-                        resolve(text);
-                    })
-                    .catch(error => {
-                        //TODO handle error
-                    })
-            } else {
-                resolve(false);
-            }
-        });
-    }
-
-    function getCookie(name) {
-        var dc = document.cookie;
-        var prefix = name + "=";
-        var begin = dc.indexOf("; " + prefix);
-        if (begin == -1) {
-            begin = dc.indexOf(prefix);
-            if (begin != 0) return null;
-        } else {
-            begin += 2;
-            var end = document.cookie.indexOf(";", begin);
-            if (end == -1) {
-                end = dc.length;
-            }
+        #map {
+            position: absolute;
+            top: 56px;
+            bottom: 0;
+            width: 100%;
         }
-        return decodeURI(dc.substring(begin + prefix.length, end));
-    }
+    </style>
 
-A do souboru {publicloop_root}/app/frondend/signin.html si vložíme skript pro volání funkce isUserSignin(session_id).
+Dále si přidáme skript, který nám zajistí zobrazení mapy.
 
-    <script>
-        window.addEventListener('DOMContentLoaded', function () {
-            var session_id = getCookie('session_id');
-            document.getElementById("loader").style.display = 'block';
-            isUserSignin(session_id).then((response) => {
-                var res = JSON.parse(response);
-                if (res.signin) {
-                    window.location.href = 'http://localhost/map.html'
-                } else {
-                    document.getElementById("loader").style.display = 'none';
-                }
+    <script type="text/javascript">
+        var lat = 15.767525;
+        var lng = 50.033570;
+        var zoom = 13;
+
+        var view = new ol.View({
+            center: ol.proj.fromLonLat([lat, lng]),
+            zoom: zoom
+        });
+    
+        var layers = [
+            new ol.layer.Tile({
+                source: new ol.source.OSM()
             })
-        })
+        ];
+    
+        var map = new ol.Map({
+            target: 'map',
+            layers: layers,
+            view: view
+        });
     </script>
 
+Stáhneme si mapovou značku z https://www.iconfinder.com/icons/299087/marker_map_icon a uložíme si ji do adresáře {publicloop_root}/app/frondend/images/marker.png.
+Značku si zobrazíme na mapě na pozici naší fakulty [50.033570, 15.767525].
 
-### Ověření přihlášeného uživatele na stránce map.html
-Na stránce map.html si ověříme, zda je uživatel přihlášen. Pokud uživatel nebude přihlášen, přesměrujeme ho na stránku {publicloop_root}/app/frondend/signin.html.  
-Toto ověření provedeme naprosto stejně jako v předcházejícím příkladu. Na stránce {publicloop_root}/app/frondend/map.html si přidáme loader a skript pro dotaz na server.
-
-    <div id="loader">
-        <div class="circle"></div>
-    </div>
-    <script>
-        window.addEventListener('DOMContentLoaded', function () {
-            var session_id = getCookie('session_id');
-            if (session_id != null) {
-                document.getElementById("loader").style.display = 'block';
-                isUserSignin(session_id).then((response) => {
-                    var res = JSON.parse(response);
-                    if (res.signin) {
-                        document.getElementById("loader").style.display = 'none';
-                    } else {
-                        window.location.href = 'http://localhost/signin.html'
-                    }
-                })
-            } else {
-                window.location.href = 'http://localhost/signin.html'
-            }
-        })
-    </script>
-
-### Odhlášení uživatele
-Na stránku {publicloop_root}/app/frondend/map.html si přidáme tlačítko pro odhlášení uživatele.
-
-        <a id="signOut" href="#">Sign out</a> 
-        <script>
-            document.getElementById("signOut").addEventListener('click', function (event) {
-                event.preventDefault();
+    <script type="text/javascript">
+        //markers
+        var iconStyle = new ol.style.Style({
+            image: new ol.style.Icon({
+                anchor: [0.5, 1],
+                src: 'images/marker.png'
+            })
+        });
+    
+        var labelStyle = new ol.style.Style({
+            text: new ol.style.Text({
+                font: '16px Montserrat,sans-serif',
+                overflow: true,
+                fill: new ol.style.Fill({
+                    color: '#000'
+                }),
+                stroke: new ol.style.Stroke({
+                    color: '#fff',
+                    width: 3
+                }),
+                offsetY: -60
+            })
+        });
+    
+        var style = [iconStyle, labelStyle];
+    
+        //marker
+        var markers = new ol.layer.Vector({
+            source: new ol.source.Vector(),
+            style: function(feature) {
+                labelStyle.getText().setText(feature.get('name'));
+                return style;
+            },
+            minZoom: 9,
+        });
+    
+        markers.setZIndex( 1004 );
+        map.addLayer(markers);
+    
+        var lat_marker = 15.767525;
+        var lng_marker = 50.033570;
         
-                fetch('http://localhost/backend/user/signout', {
-                    Method: 'GET'
-                })
-                    .then((response) => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error, status = ${response.status}`);
-                        }
-                        return response.text();
-                    })
-                    .then((text) => {
-                        let retObj = JSON.parse(text);
-                        if (retObj.signout) {
-                            window.location.href = 'http://localhost/signin.html'
-                        } else {
-                            //TODO something wrong
-                        }
-                    })
-                    .catch((error) => {
-                        var p = document.createElement("p");
-                        p.appendChild(document.createTextNode(`Error: ${error.message}`));
-                        document.body.innerHTML = "";
-                        document.body.appendChild(p);
-                    });
-            })
-        </script>
+        var marker = new ol.Feature({
+            geometry: new ol.geom.Point(ol.proj.fromLonLat([ lat_marker, lng_marker])),
+            name: 'FEI',
+        });
+        markers.getSource().addFeature(marker);
+    </script>
 
-Na straně backendu si přidáme routu /user/signout.
+Přidáme si funkcionalitu, která nám zajistí vykreslení aktuální polohy. K tomu je nutné, aby klient povolil ve svém webovém prohlížeči API určování polohy. Mapová značka aktuální poloha je modrá tečka.
 
-    case '/user/signout':
-        if(typeof session_data.data.user_key != 'undefined') {
-            try {
-                session_data.data = {};
-                fs.writeFileSync(file, JSON.stringify(session_data), {flag: ''});
+    <script>
+        //current point
+        var geolocation = new ol.Geolocation({
+            trackingOptions: {
+                enableHighAccuracy: true
+            },
+            projection: view.getProjection()
+        });
     
-                res.statusCode = 200;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({signout: true}));
-            } catch (e) {
-                res.statusCode = 200;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({signout: false}));
-            }
-        } else {
-            res.statusCode = 200;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({signout: false}));
+        geolocation.setTracking(true);
+    
+        // update the HTML page when the position changes.
+        geolocation.on('change', function() {
+            //console.log(geolocation.getPosition());
+        });
+    
+        geolocation.on('error', function(error) {
+            //console.log(error.message);
+        });
+    
+        var accuracyFeature = new ol.Feature();
+        accuracyFeature.setStyle(new ol.style.Style({
+        }));
+    
+        geolocation.on('change:accuracyGeometry', function() {
+            accuracyFeature.setGeometry(geolocation.getAccuracyGeometry());
+        });
+    
+        var positionFeature = new ol.Feature();
+        positionFeature.setStyle(new ol.style.Style({
+            image: new ol.style.Circle({
+                radius: 6,
+                fill: new ol.style.Fill({
+                    color: '#3399CC'
+                }),
+                stroke: new ol.style.Stroke({
+                    color: '#fff',
+                    width: 2
+                })
+            })
+        }));
+    
+        geolocation.on('change:position', function() {
+            var coordinates = geolocation.getPosition();
+            positionFeature.setGeometry(coordinates ?
+                new ol.geom.Point(coordinates) : null);
+        });
+    
+        new ol.layer.Vector({
+            map: map,
+            source: new ol.source.Vector({
+                features: [accuracyFeature, positionFeature]
+            })
+        });
+    </script>
+
+## Plánování trasy 
+Do menu si přidáme tlačítko pro zadání plánované trasy.
+
+    ...
+    <li class="nav-item">
+        <a class="nav-link active" aria-current="page" href="#" id="planJourney">Plan journey</a>
+    </li>
+    ...
+
+Pro tlačítko Plan journey přidáme akci, která zobrazí modální okno.
+
+    <script>
+        document.getElementById("planJourney").addEventListener('click', function (event) {
+            event.preventDefault();
+
+            document.querySelector("#offcanvasDarkNavbar > div.offcanvas-header > button")
+                    .dispatchEvent(new Event('click'));
+            
+            let planModal = new bootstrap.Modal(document.getElementById('planJourneyModal'), {});
+            planModal.show();
+        })
+    </script>
+
+Do zdrojového kódu si přidáme modální okno frameworku Bootstrap https://getbootstrap.com/docs/5.3/components/modal/.
+
+
+    <div class="modal fade" id="planJourneyModal" tabindex="-1" aria-labelledby="exampleModalLabel" 
+        aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h1 class="modal-title fs-5" id="exampleModalLabel">Plan Journey</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                    </button>
+                </div>
+                <div class="modal-body">
+                    ...
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="findJourney">Find</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+Do body modálního okna si přidáme formulář s položkami:
+* From
+* To
+* Depart at
+* Arrive at
+
+
+    <form>
+    <div class="form-floating mb-3">
+       <input type="text" class="form-control form-control-sm" id="fromInput" 
+        placeholder="Find a place ...">
+       <label for="fromInput">From</label>
+    </div>
+    <div class="form-floating mb-3">
+       <input type="text" class="form-control form-control-sm" id="toInput" 
+        placeholder="Find a place ...">
+       <label for="toInput">To</label>
+    </div>
+    
+    <ul class="nav nav-tabs" id="myTab" role="tablist">
+       <li class="nav-item" role="presentation">
+           <button class="nav-link active" id="depart-tab" data-bs-toggle="tab" 
+            data-bs-target="#depart-tab-pane" type="button" role="tab" 
+            aria-controls="depart-tab-pane" aria-selected="true">Depart at</button>
+       </li>
+       <li class="nav-item" role="presentation">
+           <button class="nav-link" id="arrive-tab" data-bs-toggle="tab" 
+            data-bs-target="#arrive-tab-pane" type="button" role="tab" 
+            aria-controls="arrive-tab-pane" aria-selected="false">Arrive at</button>
+       </li>
+    </ul>
+    <div class="tab-content" id="myTabContent">
+       <div class="tab-pane fade show active pt-3" id="depart-tab-pane" 
+            role="tabpanel" aria-labelledby="depart-tab" tabindex="0">
+           <div class="form-floating mb-3">
+               <input type="datetime-local" class="form-control form-control-sm" 
+                id="dateDepartInput" placeholder="...">
+               <label for="dateDepartInput">Date</label>
+           </div>
+       </div>
+       <div class="tab-pane fade" id="arrive-tab-pane" role="tabpanel" 
+            aria-labelledby="arrive-tab" tabindex="0">
+           <div class="tab-pane fade show active pt-3" id="arrive-tab-pane" 
+                role="tabpanel" aria-labelledby="arrive-tab" tabindex="0">
+               <div class="form-floating mb-3">
+                   <input type="datetime-local" class="form-control form-control-sm" 
+                    id="dateArriveInput" placeholder="...">
+                   <label for="dateArriveInput">Date</label>
+               </div>
+           </div>
+       </div>
+    </div>
+    </form>
+
+Položky dateDepartInput a dateArriveInput vyplníme aktuálním časem.
+
+    <script>
+        function setCurrentDatetime(id_element) {
+            var now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById(id_element).value = now.toISOString().slice(0,16);
         }
+    
+        setCurrentDatetime('dateDepartInput');
+        setCurrentDatetime('dateArriveInput');
+    </script>
+
+Jako poslední si přidáme akci pro tlačítko find.
+
+1. zavřít modální okno
+2. zobrazit loader
+3. načíst hodnoty formuláře a zaslat je na /journey/find
+4. po obdržení odpovědi skrýt loader a zobrazit výsledek
+
+
+    <script>
+        document.getElementById("findJourney").addEventListener('click', function (event) {
+            event.preventDefault();
+            
+            bootstrap.Modal.getInstance(document.getElementById('planJourneyModal')).hide();
+    
+            document.getElementById("loader").style.display = 'block';
+    
+            let from = document.getElementById("fromInput").value;
+            let to = document.getElementById("toInput").value;
+            let depart = document.getElementById("dateDepartInput").value;
+            let arrive = document.getElementById("dateArriveInput").value;
+    
+            let plan_data = {
+                from: from,
+                to: to,
+                depart: depart,
+                arrive: arrive,
+                active: "depart"
+            }
+    
+            if (document.querySelector("#myTab li button.active").id == "arrive-tab") {
+                plan_data['active'] = "arrive";
+            }
+    
+            fetch('http://localhost/backend/journey/find', {
+                method: "POST",
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(plan_data)
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error, status = ${response.status}`);
+                    }
+                    return response.text();
+                })
+                .then((text) => {
+                    document.getElementById("loader").style.display = 'none';
+                    //TODO
+                    console.log(text);
+                })
+                .catch(error => {
+                    //TODO handle error
+                })
+        })
+    </script>
+
+Na backendu přidáme v souboru {publicloop_root}/app/backend/index.js routu /journey/find.
+
+    case '/journey/find':
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({journey: "TODO"}));
     break;
