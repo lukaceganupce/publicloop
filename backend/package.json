@@ -1,15 +1,21 @@
 {
   "name": "publicloop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
+    "dev": "npx nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Lukáš Čegan",
   "license": "ISC",
   "dependencies": {
+    "crypto": "^1.0.1",
     "express": "^4.19.2",
-    "mysql2": "^3.9.3"
+    "fs": "^0.0.1-security",
+    "mysql2": "^3.9.3",
+    "nodemon": "^3.1.0",
+    "path": "^0.12.7"
   }
 }

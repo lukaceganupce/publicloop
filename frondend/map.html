@@ -8,27 +8,51 @@
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-<h1>Publicloop</h1>
+<div id="loader">
+    <div class="circle"></div>
+</div>
 <script>
-    const myHeaders = new Headers();
-    myHeaders.append("Accept", "plain/text");
-    const myOptions = {method: "GET", headers: myHeaders};
-    const myRequest = new Request("http://localhost/backend", myOptions);
-    fetch(myRequest).then((response) => {
-        if (!response.ok) {
-            throw new Error(`HTTP error, status = ${response.status}`);
+    window.addEventListener('DOMContentLoaded', function () {
+        var session_id = getCookie('session_id');
+        if (session_id != null) {
+            document.getElementById("loader").style.display = 'block';
+            isUserSignin(session_id).then((response) => {
+                var res = JSON.parse(response);
+                if (res.signin) {
+                    document.getElementById("loader").style.display = 'none';
+                } else {
+                    window.location.href = 'http://localhost/signin.html'
+                }
+            })
+        } else {
+            window.location.href = 'http://localhost/signin.html'
         }
-        return response.text();
-    }).then((text) => {
-        var p = document.createElement("p");
-        p.appendChild(document.createTextNode(`${text}`));
-        document.body.innerHTML = "";
-        document.body.appendChild(p);
-    }).catch((error) => {
-        var p = document.createElement("p");
-        p.appendChild(document.createTextNode(`Error: ${error.message}`));
-        document.body.innerHTML = "";
-        document.body.appendChild(p);
+    })
+</script>
+<h1>Publicloop</h1>
+
+<a id="signOut" href="#">Sign out</a>
+<script>
+    document.getElementById("signOut").addEventListener('click', function (event) {
+        event.preventDefault();
+        fetch('http://localhost/backend/user/signout', {Method: 'GET'}).then((response) => {
+            if (!response.ok) {
+                throw new Error(`HTTP error, status = ${response.status}`);
+            }
+            return response.text();
+        }).then((text) => {
+            let retObj = JSON.parse(text);
+            if (retObj.signout) {
+                window.location.href = 'http://localhost/signin.html'
+            } else {
+                //TODO something wrong
+            }
+        }).catch((error) => {
+            var p = document.createElement("p");
+            p.appendChild(document.createTextNode(`Error: ${error.message}`));
+            document.body.innerHTML = "";
+            document.body.appendChild(p);
+        });
     })
 </script>
 <script src="js/bootstrap.js"></script>

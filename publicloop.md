@@ -1,304 +1,368 @@
-# PUBLICLOOP (v0.2.0)
+# PUBLICLOOP (v0.3.0)
 Vývoj skvělé, neuvěřitelné, úžasné a spektakulární aplikace pro vyhledávání spojení mezi bodem A a B ve veřejném prostoru krok za krokem. 
 
-### Připojení do databáze z WebStormu
-Spustíme WebStorm a otevřeme okno Database (View -> Tool Windows -> Databas). Následně otevřeme dialog pro vytvoření spojení s databázovým serverem (New -> DataSource -> MariaDb -> MariaDB). V dialogu vyplníme:
-* name: @localhost
-* host: localhost
-* port: 3306
-* username: root
 
-> V případě, že nemáme nainstalovaný řadič, zobrazí se nám ve spodní části dialogu "Download missing driver files". Kliknutím na slovo Download se nám automaticky řadič nainstaluje.
+## Automatický restart Backend serveru
+Pro otestování každé změny zdrojových souborů backendu aplikace je nutné ukončit běh node.js skriptu a skript znovu spustit. Pro automatický restart backend serveru vyvolaný změnou zdrojového kódu použijeme nodemoon.
 
-Následně můžeme otestovat spojení a v případě úspěchu můžeme spojení uložit. Po uložení spojení se nám automaticky otevře okno "console", prostřednictvím kterého můžeme s databází komunikovat.
-> Okno "console" můžeme otevřít pomocí výběru konkrétního spojení a tlačítka New -> Query Console (Ctrl + Shift + Q)
+    {publicloop_root}/app/backend/npm install nodemon
 
-### Založení nového uživatele a databáze
-Pro vytvoření nové databáze publicloop napíšeme do okna console níže uvedený SQL dotaz a provedeme Execute (tlačítko zelené šipky).
+Dále si do souboru {publicloop_root}/app/backend/package.json přidáme do sekce skript položky start a dev.
 
-    CREATE DATABASE publicloop CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci;
+    ...
+    "scripts": {
+      "start": "node index.js",
+      "dev": "npx nodemon index.js",
+      "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    ...
 
-Pro vytvoření nového uživatel publicloop s veškerými právy pro databázi publicloop napíšeme do okna console níže uvedený SQL dotaz a provedeme Execute.
-
-    CREATE USER publicloop IDENTIFIED BY 'publiclooppassword';
-    GRANT ALL PRIVILEGES ON publicloop.* TO 'publicloop'@'%' WITH GRANT OPTION;
-
-### Připojení do databáze publicloop
-V oknu Database (View -> Tool Windows -> Databas) otevřeme dialog pro vytvoření spojení s databázovým serverem (New -> DataSource -> MariaDb -> MariaDB). V dialogu vyplníme:
-* name: publicloop@localhost
-* host: localhost
-* port: 3306
-* username: publicloop
-* password: publiclooppassword
-* database: publicloop
+> Backend aplikace lze spustit v módu bez automatického restartu (start) nebo s automatickým restartem při změně (dev).
+>
+>     npm run start 
+>     npm run dev
 
 
-### Tvorba datového modelu v nástroji MySQL Workbench
-Vytvoříme si nový model (File -> New model).Následně si model uložíme File -> Save model as do adresáře {publicloop_root}/datamodel s názvem publicloop.mwb.
-V modelu si vytvoříme novou tabulku "Users", která bude mít atributy:
-* user_key (int)
-* username (varchar)
-* password (varchar)
+Pro usnadnění spouštění backendu si můžeme upravit dávku {publicloop_root}/start-backend-app.bat.
 
-Z modelu vygenerujeme SQL dotaz.
+    @echo off
+    setlocal
+    
+    set arg=%1
+    echo PublicLoop is trying to start - please wait  ...
+    
+    if not defined arg goto :dev
+    if %arg%==start (goto start) else (goto unsupported)
+    
+    :dev
+    cd app/backend
+    npm run dev
+    goto finish
+    
+    :start
+    cd app/backend
+    npm run start
+    goto finish
+    
+    :unsupported
+    echo Unsupported argument
+    goto finish
+    
+    if errorlevel 0 goto finish
+    if errorlevel 1 goto error
+    goto finish
+    
+    :error
+    echo.
+    echo PublicLoop could not be started
+    
+    :finish
+    pause
 
-    CREATE TABLE IF NOT EXISTS `publicloop`.`users` (
-      `user_key` INT NOT NULL AUTO_INCREMENT,
-      `email` VARCHAR(255) NOT NULL,
-      `password` VARCHAR(255) NOT NULL,
-      PRIMARY KEY (`user_key`))
-    ENGINE = InnoDB;
 
-Tento dotaz vložíme do konzole publicloop@localhost a provedeme Execute. V okně Database by se měla ve výpisu zobrazit tabulka users pod spojením publicloop@localhost. 
 
-> V případě, že použijete spojení @localhost, musíte nejdříve vybrat databázi, se kterou chcete pracovat:
->           
->       use publicloop;
+## Vytvoření relace mezi klientem a serverem
+Abychom na backendu naší aplikace mohli rozlišit jednotlivé uživatele, musíme mezi klientem a serverem vytvořit relaci, která nám pomůže překonat bezestavovost protokolu HTTP (viz https://en.wikipedia.org/wiki/HTTP#HTTP_session).
+Vytvoření relace se skládá z následujících kroků:
+1. Při zpracování každého klientského požadavku ověříme, zda klient zasílá v HTTP požadavku jedinečný identifikátor. Pokud ne, vytvoříme ho.
+2. Načteme data ze souboru, jehož název je stejný jako jedinečný identifikátor. Pokud soubor neexistuje, vytvoříme ho.
+3. Pokud jsme vygenerovali nový uid, tak ho klientovi zašleme.
 
-### CRUD
-Vyzkoušejte si všechny operace CRUD:
-* Cread 
 
-      INSERT INTO `users` VALUES (null, "lukas.cegan@upce.cz", "heslo");
-* Read 
+### Krok 1
+Pro načtení hlaviček HTTP požadavku si vytvoříme v souboru {publicloop_root}/app/backend/index.js funkci parseCookies.   
 
-      SELECT * FROM `users` WHERE `email` = "lukas.cegan@upce.cz";
-* Update 
-
-      UPDATE `users` SET  `email` ="cegan@upce.cz" WHERE `email` = "lukas.cegan@upce.cz";
-
-* Delete
-
-      DELETE FROM `users` WHERE `email` = "lukas.cegan@upce.cz"; 
-
-### Komunikace s DB v backendu
-Do backenedu aplikace přidáme balíček pro práci s databází mysql.
-
-    npm install mysql2
-
-Do zdrojového kódu souboru {publicloop_root}/app/backend/index.js vložte podporu pro práci s DB.
-
-    const http = require('http');
-    const mysql = require("mysql2");
-    const hostname = '127.0.0.1';
-    const port = 3000;
-    const server = http.createServer((req, res) => {
-        var body = '';  //get request body
-        req.on('data', chunk => {
-          body += chunk.toString(); // convert Buffer to string
+    function parseCookies (request) {
+        const list = {};
+        const cookieHeader = request.headers?.cookie;
+        if (!cookieHeader) return list;
+    
+        cookieHeader.split(`;`).forEach(function(cookie) {
+            let [ name, ...rest] = cookie.split(`=`);
+            name = name?.trim();
+            if (!name) return;
+            const value = rest.join(`=`).trim();
+            if (!value) return;
+            list[name] = decodeURIComponent(value);
         });
-        req.on('end', () => {
-          let reqData = JSON.parse(body);
-          let username = reqData.email;
-          let password = reqData.password;
-          var connection = getConn();
-          connection.query(
-            'SELECT *  FROM users WHERE email=? and password = ?',
-            [username, password],
-            function (err, results) {
-              if (err) {
-                res.statusCode = 500;
-                res.setHeader('Content-Type', 'text/plain');
-                res.end('Internal Server Error');
-              } else {
-                var exist = false;
-                results.forEach(function(item){
-                  exist = true;
-                });
-                var resData = {login: exist}
-                res.statusCode = 200;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify(resData));
-              }
-            }
-          );
-        });
-    });
-    server.listen(port, hostname, () => {
-      console.log(`PublicLoop running at http://${hostname}:${port}/`);
-    });
-
-    function getConn () {
-      return mysql.createConnection({
-        host: 'localhost',
-        user: 'publicloop',
-        password: 'publiclooppassword',
-        database: 'publicloop',
-      });
+    
+        return list;
     }
 
-Do zdrojového kódu souboru {publicloop_root}/app/frondend/signin.html vložíme následující kód.
+Tuto funkci použijeme pro načtení Cookie session_id. Pokud neexistuje, tak uid vytvoříme.
+
+    const crypto = require('crypto');    
+    const server = http.createServer((req, res) => {
+      let uid = null;
+      const cookies = parseCookies(req);
+      if (typeof cookies.session_id != 'undefined') {
+        uid = cookies.session_id;
+      } else {
+        uid = (crypto.randomUUID());
+      }
+    ...
+    }
+
+> Balíček crypto si musíme do aplikace doinstalovat.
+>
+>     npm install crypto
+
+
+### Krok 2
+Pokud existuje uid, načteme soubor uid z úložiště. Pokud neexistuje, tak soubor vytvoříme.
+
+    const fs = require('fs');
+    const path = require('path');
+    const file = path.resolve(__dirname, '..', 'tmp_session/',uid);
+    let session_data = {session_id:uid,data: {}};
+    try {
+      session_data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch (err) {
+      fs.writeFileSync(file, JSON.stringify(session_data), { flag: 'ax' });
+    }
+
+> Balíček fs a path si musíme do aplikace doinstalovat.
+>
+>     npm install fs
+>     npm install path
+
+> Musíme si také na file systému vytvořit adresář {publicloop_root}/app/tmp_session. Z důvodu bezpečnosti si adresář tmp_session vytvoříme mimo publikační strom frondendu i backendu.
+
+### Krok 3
+Klientovi zašleme session_id v cookie v hlavičce HTTP odpovědi (https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie).
+
+    var session_cookie = 'session_id=' + uid+'; path=/; Secure; Max-Age=9000; SameSite=None'
+    res.setHeader('Set-Cookie', session_cookie);
+
+## Řízení přístupu 
+
+### Práce s daty session souboru
+Nyní máme možnost ukládat na straně serveru klientova data (identifikována prostřednictvím UID). Příkladem může být uložení user_key do session souboru po úspěšném přihlášení uživatele do aplikace.
+
+    case '/user/signin':
+        if(typeof session_data.data.user_key != 'undefined') {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Set-Cookie', session_cookie);
+            res.end(JSON.stringify({signin: true}));
+            break;
+        }
+    
+        var body = '';  //get request body
+        req.on('data', chunk => {
+            body += chunk.toString(); // convert Buffer to string
+        });
+        req.on('end', () => {
+            let reqData = JSON.parse(body);
+            let username = reqData.email;
+            let password = reqData.password;
+            var connection = getConn();
+            connection.query(
+                'SELECT *  FROM users WHERE email=? and password = ?',
+                [username, password],
+                function (err, results) {
+                    if (err) {
+                        res.statusCode = 500;
+                        res.setHeader('Content-Type', 'text/plain');
+                        res.end('Internal Server Error');
+                    } else {
+                        var exist = false;
+                        var user_key = null;
+                        results.forEach(function (item) {
+                            exist = true;
+                            user_key = item.user_key;
+                        });
+                        if (exist) {
+                            session_data.data ['user_key'] = user_key;
+                            fs.writeFileSync(file, JSON.stringify(session_data), {flag: ''});
+                        }
+                        var resData = {login: exist}
+                        res.statusCode = 200;
+                        res.setHeader('Content-Type', 'application/json');
+                        res.setHeader('Set-Cookie', session_cookie);
+                        res.end(JSON.stringify(resData));
+                    }
+                }
+            );
+        });
+    break;
+
+### Ověření přihlášeného uživatele na stránce signin.html
+Na stránce signin si nejdříve ověříme, jestli už není uživatel přihlášen. Vytvoříme si loader, který bude zobrazen po dobu realizace dotazu na backend. Do souboru {publicloop_root}/app/frondend/css/styles.css si vložíme následující zdrojový kód. 
+
+    #loader {
+        display: none;
+        position: absolute;
+        width: 100vw;
+        height: 100vh;
+        background:rgba(0,0,0,0.7);
+        z-index: 5000;
+    }
+    .circle {
+        position: absolute;
+        top: calc(50vh - 58px);
+        left: calc(50vw - 58px);
+        border: 16px solid #f3f3f3; /* Light grey */
+        border-top: 16px solid #3498db; /* Blue */
+        border-radius: 50%;
+        width: 120px;
+        height: 120px;
+        animation: spin 2s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+A do souboru {publicloop_root}/app/frondend/signin.html si vložíme:
+
+    <div id="loader">
+        <div class="circle"></div>
+    </div>
+
+Do souboru {publicloop_root}/app/frondend/js/app.js si přidáme obslužné funkce.
+
+    function isUserSignin(session_id) {
+        return new Promise((resolve) => {
+            if (session_id != null) {
+                fetch('http://localhost/backend/user/signin', {
+                    method: "POST",
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({})
+                })
+                    .then((response) => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error, status = ${response.status}`);
+                        }
+                        return response.text();
+                    })
+                    .then((text) => {
+                        resolve(text);
+                    })
+                    .catch(error => {
+                        //TODO handle error
+                    })
+            } else {
+                resolve(false);
+            }
+        });
+    }
+
+    function getCookie(name) {
+        var dc = document.cookie;
+        var prefix = name + "=";
+        var begin = dc.indexOf("; " + prefix);
+        if (begin == -1) {
+            begin = dc.indexOf(prefix);
+            if (begin != 0) return null;
+        } else {
+            begin += 2;
+            var end = document.cookie.indexOf(";", begin);
+            if (end == -1) {
+                end = dc.length;
+            }
+        }
+        return decodeURI(dc.substring(begin + prefix.length, end));
+    }
+
+A do souboru {publicloop_root}/app/frondend/signin.html si vložíme skript pro volání funkce isUserSignin(session_id).
 
     <script>
-        document.getElementById("signIn").addEventListener('click', function (event) {
-            event.preventDefault();
-
-            const floatingInput = document.getElementById("floatingInput").value;
-            const floatingPassword = document.getElementById("floatingPassword").value;
-            const rememberMe = document.getElementById("rememberMe").checked;
-
-            const myHeaders = new Headers();
-            myHeaders.append("Accept", "application/json");
-
-            const myBody = JSON.stringify({
-                email: floatingInput,
-                password: floatingPassword,
-                remember: rememberMe
-            });
-
-            const myOptions = {
-                method: "POST",
-                headers: myHeaders,
-                body: myBody,
-            };
-
-            const myRequest = new Request("http://localhost/backend", myOptions);
-
-            fetch(myRequest)
-                .then((response) => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error, status = ${response.status}`);
-                    }
-                    return response.text();
-                })
-                .then((text) => {
-                   let retObj = JSON.parse(text);
-                   if (retObj.login) {
-                       window.location.replace("http://localhost/map.html");
-                   }
-
-                })
-                .catch((error) => {
-                    var p = document.createElement("p");
-                    p.appendChild(document.createTextNode(`Error: ${error.message}`));
-                    document.body.innerHTML = "";
-                    document.body.appendChild(p);
-                });
+        window.addEventListener('DOMContentLoaded', function () {
+            var session_id = getCookie('session_id');
+            document.getElementById("loader").style.display = 'block';
+            isUserSignin(session_id).then((response) => {
+                var res = JSON.parse(response);
+                if (res.signin) {
+                    window.location.href = 'http://localhost/map.html'
+                } else {
+                    document.getElementById("loader").style.display = 'none';
+                }
+            })
         })
     </script>
 
-### Směrování klientských požadavků na backend aplikace
-Pro každý klientský požadavek je na backendu vytvořena aplikační logika, která tento požadavek zpracuje. Směrování klientských požadavků na konkrétní kus zdrojového kódu obstará "Router". V našem případě bude router představovat větvení programu pomocí konstrukce "switch".   
-Zdrojový kód souboru {publicloop_root}/app/backend/index.js upravíme dle níže uvedeného příkladu. 
 
-    const http = require('http');
-    const mysql = require("mysql2");
-    const hostname = '127.0.0.1';
-    const port = 3000;
-    const server = http.createServer((req, res) => {
-      switch (req.url) {
-        case '/user/signin':
-        var body = '';  //get request body
-        req.on('data', chunk => {
-          body += chunk.toString(); // convert Buffer to string
-        });
-        req.on('end', () => {
-          let reqData = JSON.parse(body);
-          let username = reqData.email;
-          let password = reqData.password;
-          var connection = getConn();
-          connection.query(
-            'SELECT *  FROM users WHERE email=? and password = ?',
-            [username, password],
-            function (err, results) {
-              if (err) {
-                res.statusCode = 500;
-                res.setHeader('Content-Type', 'text/plain');
-                res.end('Internal Server Error');
-              } else {
-                var exist = false;
-                results.forEach(function(item){
-                  exist = true;
-                });
-                var resData = {login: exist}
+### Ověření přihlášeného uživatele na stránce map.html
+Na stránce map.html si ověříme, zda je uživatel přihlášen. Pokud uživatel nebude přihlášen, přesměrujeme ho na stránku {publicloop_root}/app/frondend/signin.html.  
+Toto ověření provedeme naprosto stejně jako v předcházejícím příkladu. Na stránce {publicloop_root}/app/frondend/map.html si přidáme loader a skript pro dotaz na server.
+
+    <div id="loader">
+        <div class="circle"></div>
+    </div>
+    <script>
+        window.addEventListener('DOMContentLoaded', function () {
+            var session_id = getCookie('session_id');
+            if (session_id != null) {
+                document.getElementById("loader").style.display = 'block';
+                isUserSignin(session_id).then((response) => {
+                    var res = JSON.parse(response);
+                    if (res.signin) {
+                        document.getElementById("loader").style.display = 'none';
+                    } else {
+                        window.location.href = 'http://localhost/signin.html'
+                    }
+                })
+            } else {
+                window.location.href = 'http://localhost/signin.html'
+            }
+        })
+    </script>
+
+### Odhlášení uživatele
+Na stránku {publicloop_root}/app/frondend/map.html si přidáme tlačítko pro odhlášení uživatele.
+
+        <a id="signOut" href="#">Sign out</a> 
+        <script>
+            document.getElementById("signOut").addEventListener('click', function (event) {
+                event.preventDefault();
+        
+                fetch('http://localhost/backend/user/signout', {
+                    Method: 'GET'
+                })
+                    .then((response) => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error, status = ${response.status}`);
+                        }
+                        return response.text();
+                    })
+                    .then((text) => {
+                        let retObj = JSON.parse(text);
+                        if (retObj.signout) {
+                            window.location.href = 'http://localhost/signin.html'
+                        } else {
+                            //TODO something wrong
+                        }
+                    })
+                    .catch((error) => {
+                        var p = document.createElement("p");
+                        p.appendChild(document.createTextNode(`Error: ${error.message}`));
+                        document.body.innerHTML = "";
+                        document.body.appendChild(p);
+                    });
+            })
+        </script>
+
+Na straně backendu si přidáme routu /user/signout.
+
+    case '/user/signout':
+        if(typeof session_data.data.user_key != 'undefined') {
+            try {
+                session_data.data = {};
+                fs.writeFileSync(file, JSON.stringify(session_data), {flag: ''});
+    
                 res.statusCode = 200;
                 res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify(resData));
-              }
+                res.end(JSON.stringify({signout: true}));
+            } catch (e) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({signout: false}));
             }
-          );
-        });
-        break;
-      case '/':
-      default:
-        res.statusCode = 404;
-        res.setHeader('Content-Type', 'text/plain');
-        res.end('Not Found');
-        break;
-      }
-    });
-    server.listen(port, hostname, () => {
-      console.log(`PublicLoop running at http://${hostname}:${port}/`);
-    });
-    
-    function getConn () {
-      return mysql.createConnection({
-        host: 'localhost',
-        user: 'publicloop',
-        password: 'publiclooppassword',
-        database: 'publicloop',
-      });
-    }
-
-Ve zdrojovém kódu souboru {publicloop_root}/app/frondend/signin.js upravíme adresu endpointu na http://localhost/backend/user/signin.
-
-    ...     
-    const myRequest = new Request("http://localhost/backend/user/signin", myOptions);
-    ...
-
-### Routování a práce s DB ve frameworku Express
-Alternativně můžeme výše popsané implementovat pomocí frameworku Express. Zdrojový kód souboru {publicloop_root}/app/backend/index.js by vypadal následovně.
-
-    const express = require('express');
-    const mysql = require("mysql2");
-    const hostname = '127.0.0.1';
-    const port = 3000;
-    
-    const app = express();
-    app.use(express.json());
-    app.post('/user/signin', (req, res) => {
-    
-        let username = req.body.email;
-        let password = req.body.password;
-        var connection = getConn();
-        connection.query(
-            'SELECT *  FROM users WHERE email=? and password = ?',
-            [username, password],
-            function (err, results) {
-                if (err) {
-                    res.statusCode = 500;
-                    res.setHeader('Content-Type', 'text/plain');
-                    res.send('Internal Server Error');
-                } else {
-                    var exist = false;
-                    results.forEach(function (item) {
-                        exist = true;
-                    });
-                    var resData = {login: exist}
-                    res.statusCode = 200;
-                    res.setHeader('Content-Type', 'application/json');
-                    res.send(JSON.stringify(resData));
-                }
-            }
-        )
-    })
-    app.get("*", (req, res) => {
-      res.statusCode = 404;
-      res.setHeader('Content-Type', 'text/plain');
-      res.send("Not Found");
-    });
-    app.listen(3000, () => console.log(`PublicLoop running at http://${hostname}:${port}/`))
-    
-    function getConn() {
-      return mysql.createConnection({
-        host: 'localhost',
-        user: 'publicloop',
-        password: 'publiclooppassword',
-        database: 'publicloop',
-      });
-    }
-
-Do zdrojového kódu souboru {publicloop_root}/app/frondend/signin.js 
-přidáme hlavičku Content-type
-
-    myHeaders.append("Content-type", "application/json");
+        } else {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({signout: false}));
+        }
+    break;
