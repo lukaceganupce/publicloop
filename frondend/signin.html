@@ -35,6 +35,41 @@
         </div>
     </div>
 </div>
+<script>
+    document.getElementById("signIn").addEventListener('click', function (event) {
+        event.preventDefault();
+
+        const floatingInput = document.getElementById("floatingInput").value;
+        const floatingPassword = document.getElementById("floatingPassword").value;
+        const rememberMe = document.getElementById("rememberMe").checked;
+
+        const myHeaders = new Headers();
+        myHeaders.append("Accept", "application/json");
+        myHeaders.append("Content-type", "application/json");
+
+        const myBody = JSON.stringify({email: floatingInput, password: floatingPassword, remember: rememberMe});
+
+        const myOptions = {method: "POST", headers: myHeaders, body: myBody,};
+
+        const myRequest = new Request("http://localhost/backend/user/signin", myOptions);
+        fetch(myRequest).then((response) => {
+            if (!response.ok) {
+                throw new Error(`HTTP error, status = ${response.status}`);
+            }
+            return response.text();
+        }).then((text) => {
+            let retObj = JSON.parse(text);
+            if (retObj.login) {
+                window.location.replace("http://localhost/map.html");
+            }
+        }).catch((error) => {
+            var p = document.createElement("p");
+            p.appendChild(document.createTextNode(`Error: ${error.message}`));
+            document.body.innerHTML = "";
+            document.body.appendChild(p);
+        });
+    })
+</script>
 <script src="js/bootstrap.js"></script>
 <script src="js/app.js"></script>
 </body>
