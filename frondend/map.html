@@ -238,6 +238,8 @@
 
         let planModal = new bootstrap.Modal(document.getElementById('planJourneyModal'), {});
         planModal.show();
+
+        clearMap();
     })
 </script>
 
@@ -354,13 +356,156 @@
             })
             .then((text) => {
                 document.getElementById("loader").style.display = 'none';
-                //TODO
-                console.log(text);
+                drawSections(text);
             })
             .catch(error => {
                 //TODO handle error
             })
     })
+</script>
+
+<script>
+    var point_type = null;
+    document.getElementById("fromInput").addEventListener('click', function (event) {
+        point_type = 'from';
+        bootstrap.Modal.getInstance(document.getElementById('planJourneyModal')).hide();
+    })
+
+    document.getElementById("toInput").addEventListener('click', function (event) {
+        point_type = 'to';
+        bootstrap.Modal.getInstance(document.getElementById('planJourneyModal')).hide();
+    })
+
+    var vectorLayerFrom = null;
+    var vectorLayerTo = null;
+
+    map.on('click', function (event) {
+        var point = map.getCoordinateFromPixel(event.pixel);
+        var lonLat = ol.proj.toLonLat(point);
+        if (point_type == 'from' || point_type == 'to') {
+            bootstrap.Modal.getInstance(document.getElementById('planJourneyModal')).show();
+        }
+
+        if (point_type == 'from') {
+            document.getElementById("fromInput").value = lonLat;
+
+            if (vectorLayerFrom != null)
+                map.removeLayer(vectorLayerFrom);
+
+            var featureCircle = new ol.Feature({
+                geometry: new ol.geom.Point(point),
+                name: 'From',
+            });
+
+            var vectorCircle = new ol.source.Vector({});
+            vectorCircle.addFeature(featureCircle);
+
+            vectorLayerFrom = new ol.layer.Vector({
+                source: vectorCircle,
+                style: new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 6,
+                        fill: new ol.style.Fill({
+                            color: '#FF00CC'
+                        })
+                    })
+                })
+            });
+            map.addLayer(vectorLayerFrom);
+        }
+        if (point_type == 'to') {
+            document.getElementById("toInput").value = lonLat;
+
+            if (vectorLayerTo != null) {
+                map.removeLayer(vectorLayerTo);
+            }
+
+            var featureCircle = new ol.Feature({
+                geometry: new ol.geom.Point(point),
+                name: 'To',
+            });
+
+            var vectorCircle = new ol.source.Vector({});
+            vectorCircle.addFeature(featureCircle);
+
+            vectorLayerTo = new ol.layer.Vector({
+                source: vectorCircle,
+                style: new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 6,
+                        fill: new ol.style.Fill({
+                            color: '#00FFFF'
+                        })
+                    })
+                })
+            });
+
+            map.addLayer(vectorLayerTo);
+
+        }
+        point_type = null;
+    })
+</script>
+<script>
+    function drawSections(data) {
+        const resdata = JSON.parse(data);
+        const sections = resdata.sections;
+        for (let section of resdata.sections) {
+            switch (section.type) {
+                case 1:
+                    var coords = [];
+                    coords.push(ol.proj.fromLonLat([section.from.latitude, section.from.longitude]));
+                    coords.push(ol.proj.fromLonLat([section.to.latitude, section.to.longitude]));
+                    drawLines(coords, '#c800ff');
+                    break
+                case 2:
+                    var coords = [];
+                    for (let point of section.line)
+                        coords.push(ol.proj.fromLonLat([point.latitude, point.longitude]));
+                    drawLines(coords, '#0000FF');
+                    break;
+            }
+        }
+    }
+    var journeyLayers = [];
+
+    function drawLines(coords, color) {
+
+        var featureLine = new ol.Feature({
+            geometry: new ol.geom.LineString(coords),
+            name: 'Line'
+        });
+
+        var vectorLine = new ol.source.Vector({});
+        vectorLine.addFeature(featureLine);
+
+        journeyLayer = new ol.layer.Vector({
+            source: vectorLine,
+            style: new ol.style.Style({
+                fill: new ol.style.Fill({color: color, weight: 4}),
+                stroke: new ol.style.Stroke({color: color, width: 4})
+            })
+        });
+        journeyLayers.push(journeyLayer);
+        map.addLayer(journeyLayer);
+    }
+</script>
+
+<script>
+    function clearMap() {
+        if (vectorLayerFrom != null) {
+            map.removeLayer(vectorLayerFrom);
+            document.getElementById("fromInput").value = '';
+        }
+        if (vectorLayerTo != null) {
+            map.removeLayer(vectorLayerTo);
+            document.getElementById("toInput").value = '';
+        }
+        if (journeyLayers != []) {
+            for (let journeyLayer of journeyLayers)
+                map.removeLayer(journeyLayer);
+        }
+    }
 </script>
 
 <script src="js/bootstrap.js"></script>
