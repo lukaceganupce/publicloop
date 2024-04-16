@@ -3,6 +3,11 @@ const mysql = require("mysql2");
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const nodemailer = require('nodemailer');
+var Mailgen = require('mailgen');
+var dotenv = require('dotenv');
+
+dotenv.config();
 
 const hostname = '127.0.0.1';
 const port = 3000;
@@ -26,6 +31,49 @@ const server = http.createServer((req, res) => {
     var session_cookie = 'session_id=' + uid+'; path=/; Secure; Max-Age=9000; SameSite=None';
 
     switch (req.url) {
+        case '/mail/send':
+            var from = '"Publicloop" <info@publicloop.com>';
+            var to = "new.user@domain.com";
+            var subject = "Confirm your account!";
+
+            var mailGenerator = new Mailgen({
+                theme: 'default',
+                product: {
+                    name: 'Publicloop',
+                    link: 'https://publicloop.com/'
+                }
+            });
+
+            var email = {
+                body: {
+                    name: 'Lukáš Čegan',
+                    intro: 'Welcome to Publicloop! We\'re very excited to have you on board.',
+                    action: {
+                        instructions: 'To get started with Publicloop, please click here:',
+                        button: {
+                            color: '#22a0bc',
+                            text: 'Confirm your account',
+                            link: 'https://publicloop.com/confirm?s=jhfad65d4f35asd4f3as4d35f4asd3f'
+                        }
+                    },
+                    outro: 'Need help, or have questions? Just reply to this email, we\'d love to help.'
+                }
+            };
+            var emailBody = mailGenerator.generate(email);
+            var emailText = mailGenerator.generatePlaintext(email);
+
+            // Můžeme si vygenerovat náhled emailu a uložit na disk
+            const preview_file = path.resolve(__dirname, '..', 'tmp_emails/preview.html');
+            require('fs').writeFileSync( preview_file, emailBody, 'utf8');
+
+            sendMail(from, to, subject, emailText, emailBody).then((messageId) => {
+                var resData = {messageId: messageId};
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Set-Cookie', session_cookie);
+                res.end(JSON.stringify(resData));
+            }).catch(console.error)
+            break;
         case '/journey/find':
             var body = '';
             req.on('data', chunk => {
@@ -249,4 +297,24 @@ function getDistance(coords1, coords2) {
     var d = R * c;
 
     return d;
+}
+
+
+var transporter = nodemailer.createTransport({
+    host: "sandbox.smtp.mailtrap.io",
+    port: 2525,
+    auth: {
+        user: process.env.USER,
+        pass: process.env.PASSWORD,
+    }
+});
+
+async function sendMail(from, to, subject, text, html) {
+    return await transporter.sendMail({
+        from: from,
+        to: to,
+        subject: subject,
+        text: text,
+        html: html
+    });
 }

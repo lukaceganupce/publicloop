@@ -17,15 +17,18 @@
         <div class="col-md-10 mx-auto col-lg-5">
             <form class="p-4 p-md-5 border rounded-3 bg-body-tertiary">
                 <div class="form-floating mb-3">
-                    <input type="text" class="form-control" id="floatingNick" placeholder="Tonda 568">
+                    <input type="text" class="form-control" id="floatingNick" placeholder="Tonda 568" required>
+                    <div id="floatingNickInvalidFeedback" class="invalid-feedback" style="display: none"></div>
                     <label for="floatingNick">Nick</label>
                 </div>
                 <div class="form-floating mb-3">
                     <input type="email" class="form-control" id="floatingInput" placeholder="name@example.com">
+                    <div id="floatingInputInvalidFeedback" class="invalid-feedback" style="display: none">a</div>
                     <label for="floatingInput">Email address</label>
                 </div>
                 <div class="form-floating mb-3">
                     <input type="password" class="form-control" id="floatingPassword" placeholder="Password">
+                    <div id="floatingPasswordInvalidFeedback" class="invalid-feedback" style="display: none">a</div>
                     <label for="floatingPassword">Password</label>
                 </div>
 
@@ -36,6 +39,95 @@
         </div>
     </div>
 </div>
+<script>
+    document.getElementById("floatingNick").addEventListener('input', function (){
+        this.classList.remove("is-invalid");
+        document.getElementById("floatingNickInvalidFeedback").style.display = "none";
+        document.getElementById("floatingNickInvalidFeedback").textContent= "";
+    });
+
+    document.getElementById("floatingInput").addEventListener('input', function (){
+        this.classList.remove("is-invalid");
+        document.getElementById("floatingInputInvalidFeedback").style.display = "none";
+        document.getElementById("floatingInputInvalidFeedback").textContent= "";
+    });
+
+    document.getElementById("floatingPassword").addEventListener('input', function (){
+        this.classList.remove("is-invalid");
+        document.getElementById("floatingPasswordInvalidFeedback").style.display = "none";
+        document.getElementById("floatingPasswordInvalidFeedback").textContent= "";
+    });
+
+    document.getElementById("signUp").addEventListener('click', function (event) {
+        event.preventDefault();
+
+        const floatingNick = document.getElementById("floatingNick").value;
+        const floatingInput = document.getElementById("floatingInput").value;
+        const floatingPassword = document.getElementById("floatingPassword").value;
+
+        //Validation
+        var error = {};
+
+        let nickValid, emailValid, passwordValid;
+        nickValid = emailValid = passwordValid = true;
+
+        if (floatingNick.length <2)
+            error.floatingNick = "Nick must be at least 2 characters";
+
+        if (!floatingInput.includes("@"))
+            error.floatingInput = "Email address must contain a single @";
+
+        let pattern = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{6,}$/;
+        if (!pattern.test(floatingPassword))
+            error.floatingPassword = "Password must contain uppercase, lowercase, number and must be least 2 characters";
+
+        if (Object.keys(error).length >0 ) {
+            if (typeof error.floatingNick != 'undefined') {
+                document.getElementById("floatingNick").classList.add("is-invalid");
+                document.getElementById("floatingNickInvalidFeedback").style.display = "block";
+                document.getElementById("floatingNickInvalidFeedback").textContent= error.floatingNick;
+            }
+            if (typeof error.floatingInput != 'undefined') {
+                document.getElementById("floatingInput").classList.add("is-invalid");
+                document.getElementById("floatingInputInvalidFeedback").style.display = "block";
+                document.getElementById("floatingInputInvalidFeedback").textContent= error.floatingInput;
+            }
+            if (typeof error.floatingPassword != 'undefined') {
+                document.getElementById("floatingPassword").classList.add("is-invalid");
+                document.getElementById("floatingPasswordInvalidFeedback").style.display = "block";
+                document.getElementById("floatingPasswordInvalidFeedback").textContent= error.floatingPassword;
+            }
+
+        } else {
+
+            const myHeaders = new Headers();
+            myHeaders.append("Accept", "application/json");
+            myHeaders.append("Content-type", "application/json");
+
+        const myBody = JSON.stringify({nick: floatingNick, email: floatingInput, password: floatingPassword});
+
+        const myOptions = {method: "POST", headers: myHeaders, body: myBody,};
+
+        const myRequest = new Request("http://localhost/backend/user/signup", myOptions);
+        fetch(myRequest).then((response) => {
+            if (!response.ok) {
+                throw new Error(`HTTP error, status = ${response.status}`);
+            }
+            return response.text();
+        }).then((text) => {
+            let retObj = JSON.parse(text);
+            if (retObj.login) {
+                //TODO
+            }
+        }).catch((error) => {
+            var p = document.createElement("p");
+            p.appendChild(document.createTextNode(`Error: ${error.message}`));
+            document.body.innerHTML = "";
+            document.body.appendChild(p);
+        });
+        }
+    })
+</script>
 <script src="js/bootstrap.js"></script>
 <script src="js/app.js"></script>
 </body>

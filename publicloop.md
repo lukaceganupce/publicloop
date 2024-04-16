@@ -1,698 +1,375 @@
-# PUBLICLOOP (v0.5.0)
-Vývoj skvělé, neuvěřitelné, úžasné a spektakulární aplikace pro vyhledávání spojení mezi bodem A a B ve veřejném prostoru krok za krokem.
+# PUBLICLOOP (v0.6.0)
+Vývoj skvělé, neuvěřitelné, úžasné a spektakulární aplikace pro vyhledávání spojení mezi bodem A a B ve veřejném prostoru krok za krokem. 
 
-## Datová vrstva aplikace Publicloop
-Vytvoříme si tabulky potřebné pro evidenci jízdního řádu.
+## Registrace novéhu uživatele
+Nejdříve si namodelujeme proces nového uživatele v diagramové notaci BPMN (https://cs.wikipedia.org/wiki/Business_Process_Model_and_Notation). Model procesu konstruovat v nástroji Camunda (https://camunda.com/download/modeler/). 
+Pro ukládání procesů si vytvoříme adresář {publicloop_root}/app/processes/. Spustíme si nástroj Camunda pomocí souboru "Camunda Modeler.exe" a vytvoříme si nový BPMN diagram ( FIle - New File - BPMN diagram). Nový diagram si uložíme 
+do souboru signup.bpmn (File - Save File As).
 
+V dalším kroku si vymodeluje proces registrace nového uživatele v aplikaci PublicLoop. Dodržujete sintaxy a sémantiku notace BPMN (viz https://www.bpmn.org/).
 
-    CREATE TABLE IF NOT EXISTS `publicloop`.`lines`
-    (
-        `line_key`  INT          NOT NULL AUTO_INCREMENT,
-        `line_name` VARCHAR(255) NOT NULL,
-        PRIMARY KEY (`line_key`)
-    )
-    ENGINE = InnoDB;
-    
-    CREATE TABLE IF NOT EXISTS `publicloop`.`stops`
-    (
-        `stop_key`  INT          NOT NULL AUTO_INCREMENT,
-        `stop_name` VARCHAR(255) NOT NULL,
-        `latitude`  DOUBLE       NOT NULL,
-        `longitude` DOUBLE       NOT NULL,
-        `place`     VARCHAR(255) NOT NULL,
-        PRIMARY KEY (`stop_key`)
-    )
-    ENGINE = InnoDB;
-    
-    CREATE TABLE IF NOT EXISTS `publicloop`.`line_stops`
-    (
-        `linestop_key`  INT NOT NULL AUTO_INCREMENT,
-        `line_key`      INT NOT NULL,
-        `stop_key`      INT NOT NULL,
-        `direction`     INT NOT NULL,
-        `order`         INT NOT NULL,
-        PRIMARY KEY (`linestop_key`),
-        INDEX `fk_line_stops_lines_idx` (`line_key` ASC) VISIBLE,
-        INDEX `fk_line_stops_stops1_idx` (`stop_key` ASC) VISIBLE,
-        CONSTRAINT `fk_line_stops_lines`
-            FOREIGN KEY (`line_key`)
-                REFERENCES `publicloop`.`lines` (`line_key`)
-                ON DELETE NO ACTION
-                ON UPDATE NO ACTION,
-        CONSTRAINT `fk_line_stops_stops1`
-            FOREIGN KEY (`stop_key`)
-                REFERENCES `publicloop`.`stops` (`stop_key`)
-                ON DELETE NO ACTION
-                ON UPDATE NO ACTION
-    )
-    ENGINE = InnoDB;
+Pro inspiraci si můžete prostududovat vzorový proces registrace (viz soubor signup.bpmn). 
 
-
-    CREATE TABLE IF NOT EXISTS `publicloop`.`paths`
-    (
-        `path_key`      INT NOT NULL AUTO_INCREMENT,
-        `stop_key_from` INT NOT NULL,
-        `stp_key_to`    INT NOT NULL,
-        PRIMARY KEY (`path_key`)
-    )
-    ENGINE = InnoDB;
-    
-    CREATE TABLE IF NOT EXISTS `publicloop`.`points`
-    (
-        `point_key` INT   NOT NULL AUTO_INCREMENT,
-        `latitude`  FLOAT NOT NULL,
-        `longitude` FLOAT NOT NULL,
-        PRIMARY KEY (`point_key`)
-    )
-    ENGINE = InnoDB;
-    
-    CREATE TABLE IF NOT EXISTS `publicloop`.`path_points`
-    (
-        `pathpoint_key` INT NOT NULL AUTO_INCREMENT,
-        `path_key`      INT NOT NULL,
-        `point_key`     INT NOT NULL,
-        `order`         INT NOT NULL,
-        PRIMARY KEY (`pathpoint_key`),
-        INDEX `fk_path_points_paths1_idx` (`path_key` ASC) VISIBLE,
-        INDEX `fk_path_points_points1_idx` (`point_key` ASC) VISIBLE,
-        CONSTRAINT `fk_path_points_paths1`
-            FOREIGN KEY (`path_key`)
-                REFERENCES `publicloop`.`paths` (`path_key`)
-                ON DELETE NO ACTION
-                ON UPDATE NO ACTION,
-        CONSTRAINT `fk_path_points_points1`
-            FOREIGN KEY (`point_key`)
-                REFERENCES `publicloop`.`points` (`point_key`)
-                ON DELETE NO ACTION
-                ON UPDATE NO ACTION
-    )
-    ENGINE = InnoDB;
-
-Vytvoříme si skript {publicloop_root}/app/backend/import.js pro naplnění tabulek ukázkovými daty.
-
-    const mysql = require("mysql2/promise");
-    const fetch = require("node-fetch");
-    
-    const lines = [
-        '5', '13'
-    ];
-    
-    const line_stops_position = [
-        ['5', 'A',
-            [
-                ['Dukla,točna', 15.7587522, 50.0210234],
-                ['Dukla,náměstí', 15.7586374, 50.0240244],
-                ['Teplého', 15.7611141, 50.0268243],
-                ['Domov mládeže', 15.7663822, 50.0270761],
-                ['Jana Palacha', 15.7707138, 50.0285677],
-                ['17.listopadu', 15.7703028, 50.0333627],
-                ['Masarykovo náměstí', 15.7695389, 50.0379137],
-                ['Náměstí Republiky', 15.7773819, 50.0374177],
-                ['Krajský úřad', 15.7820969, 50.0381006],
-                ['Sakařova', 15.7871599, 50.0389131],
-                ['Holubova', 15.7905741, 50.0398668],
-                ['Bezdíčkova', 15.7956009, 50.0412973],
-                ['Židov', 15.7991791, 50.0412668],
-                ['Dubina,garáže', 15.8032742, 50.0420717],
-                ['Dubina,centrum', 15.8073502, 50.0448755],
-                ['Dubina,sever', 15.8114271, 50.0470595]
-            ]
-        ],
-        ['5', 'B',
-            [
-                ['Dubina,sever', 15.8117964, 50.0461022],
-                ['Dubina,centrum', 15.8067303, 50.0446390],
-                ['Dubina,garáže', 15.8031254, 50.0421709],
-                ['Židov', 15.7997923, 50.0409654],
-                ['Bezdíčkova', 15.7958479, 50.0414575],
-                ['Holubova', 15.7913580, 50.0401910],
-                ['Sakařova', 15.7863016, 50.0387529],
-                ['Krajský úřad', 15.7809601, 50.0379861],
-                ['Náměstí Republiky', 15.7770977, 50.0384935],
-                ['Masarykovo náměstí', 15.7694921, 50.0373529],
-                ['17.listopadu', 15.7700863, 50.0334772],
-                ['Jana Palacha', 15.7705622, 50.0279955],
-                ['Domov mládeže', 15.7666960, 50.0271867],
-                ['Teplého', 15.7612953, 50.0269998],
-                ['Lexova', 15.7584686, 50.0263513],
-                ['Dukla,náměstí', 15.7585001, 50.0234102],
-                ['Dukla,točna', 15.7585001, 50.0217627]
-            ]
-        ],
-        ['13', 'A',
-            [
-                ['Ohrazenice,točna', 15.7506206, 50.0617704],
-                ['Ohrazenice,Semtínská', 15.7541618, 50.0620530],
-                ['Ohrazenice,škola', 15.7573872, 50.0617936],
-                ['Globus', 15.7549706, 50.0590356],
-                ['Trnová', 15.7570572, 50.0584672],
-                ['Poděbradská', 15.7622318, 50.0547899],
-                ['Polabiny,točna', 15.7595215, 50.0513223],
-                ['Polabiny,Kosmonautů', 15.7600117, 50.0492700],
-                ['Polabiny,hotel', 15.7630043, 50.0477518],
-                ['Stavařov', 15.7666035, 50.0453943],
-                ['Zimní stadion', 15.7676811, 50.0424493],
-                ['Sukova', 15.7703161, 50.0390047],
-                ['Náměstí Republiky', 15.7773819, 50.0374177],
-                ['Krajský úřad', 15.7820969, 50.0381006],
-                ['U Kostelíčka', 15.7862148, 50.0381540],
-                ['Na Okrouhlíku', 15.7939396, 50.0354150],
-                ['Na Drážce', 15.7986202, 50.0372575],
-                ['Dubina,garáže', 15.8032742, 50.0420717],
-                ['Dubina,centrum', 15.8073502, 50.0448755],
-                ['Dubina,sever', 15.8112125, 50.0463361]
-            ]
-        ],
-        ['13', 'B',
-            [
-                ['Dubina,sever', 15.8093181, 50.0455430],
-                ['Dubina,centrum', 15.8067303, 50.0446390],
-                ['Dubina,garáže', 15.8031254, 50.0421709],
-                ['Na Drážce', 15.7984571, 50.0372003],
-                ['Na Okrouhlíku', 15.7929726, 50.0360559],
-                ['Krajský úřad', 15.7809601, 50.0379861],
-                ['Náměstí Republiky', 15.7770977, 50.0384935],
-                ['Zimní stadion', 15.7687788, 50.0401529],
-                ['Stavařov', 15.7670937, 50.0450052],
-                ['Polabiny,hotel', 15.7635155, 50.0479501],
-                ['Polabiny,Kosmonautů', 15.7603168, 50.0489534],
-                ['Polabiny,točna', 15.7605963, 50.0521348],
-                ['Poděbradská', 15.7626057, 50.0546335],
-                ['Trnová', 15.7583113, 50.0582956],
-                ['Globus', 15.7548580, 50.0592111],
-                ['Ohrazenice,škola', 15.7574835, 50.0620607],
-                ['Ohrazenice,Semtínská', 15.7535925, 50.0620683],
-                ['Ohrazenice,točna', 15.7506206, 50.0617704]
-            ]
-        ]
-    ];
-    
-    startSync();
-    
-    async function startSync() {
-    
-        await loadLines();
-    
-        await loadStops();
-       
-        process.exit();
-    }
-    
-    async function loadLines() {
-        var connection = await getConn();
-        for (let line of lines) {
-            try {
-                await connection.query(
-                'INSERT INTO `lines` VALUES (null, ?)',
-                [line]
-                );
-            } catch (err) {
-                console.log(err);
-            }
-        }
-    }
-    
-    async function loadStops() {
-        var connection = await getConn();
-    
-        for (let line_stop of line_stops_position) {
-            var line_name = line_stop[0];
-    
-            const [results_lines] = await connection.query(
-                'SELECT line_key FROM `lines` WHERE line_name = ?',
-                [line_name]
-            );
-    
-            var line_key = null;
-            for (const line of results_lines) {
-                line_key = line.line_key;
-            }
-    
-            var line_direction = line_stop[1];
-            let direction = 1;
-            if (line_direction == 'B') {
-                direction = 2;
-            }
-    
-            var index = 1;
-            for (let stop of line_stop[2]) {
-                try {
-                    const [results] = await connection.query(
-                        'INSERT INTO stops VALUES (null, ?, ?, ?, ?)',
-                        [stop[0], stop[1], stop[2], line_direction]
-                    );
-                    stop_key = results.insertId;
-    
-                } catch (err) {
-                    console.log(err);
-                }
-                try {
-                    await connection.query(
-                        'INSERT INTO line_stops VALUES (null, ?, ?, ?, ?)',
-                        [line_key, stop_key, direction, index]
-                    );
-                } catch (err) {
-                    console.log(err);
-                }
-                index++;
-            }
-        }
-    }
-
-    function getConn() {
-        return mysql.createConnection({
-            host: 'localhost',
-            user: 'publicloop',
-            password: 'publiclooppassword',
-            database: 'publicloop',
-        });
-    }
-
-Do projektu si doinstalujeme balíček node-fetch.
-
-    npm install node-fetch@2.6.1
-
-Sktipt si spustíme 
-    
-    node import.js
-
-Pokud chceme vymazar všechna data z tabulek, vypneme si kontrolu integritních omezení.
-
-    SET FOREIGN_KEY_CHECKS = 0;
-    TRUNCATE stops;
-    TRUNCATE `lines`;
-    TRUNCATE points;
-    TRUNCATE paths;
-    TRUNCATE path_points;
-    TRUNCATE line_stops;
-    SET FOREIGN_KEY_CHECKS = 1;
-
-Do souboru {publicloop_root}/app/frondend/map.html  si přidáme události pro zadání polohy FROM a TO z mapy.
+## Implementace vymodelovaného procesu
+### Aktivita Odeslání formuláře
+Načteme hodnoty prvků Nick, Email a Password a odešleme na adresu /signup.
 
     <script>
-        var point_type = null;
-        document.getElementById("fromInput").addEventListener('click', function (event) {
-            point_type = 'from';
-            bootstrap.Modal.getInstance(document.getElementById('planJourneyModal')).hide();
-        })
+        document.getElementById("signUp").addEventListener('click', function (event) {
+            event.preventDefault();
     
-        document.getElementById("toInput").addEventListener('click', function (event) {
-            point_type = 'to';
-            bootstrap.Modal.getInstance(document.getElementById('planJourneyModal')).hide();
-        })
+            const floatingNick = document.getElementById("floatingNick").value;
+            const floatingInput = document.getElementById("floatingInput").value;
+            const floatingPassword = document.getElementById("floatingPassword").value;
     
-        var vectorLayerFrom = null;
-        var vectorLayerTo = null;
+            const myHeaders = new Headers();
+            myHeaders.append("Accept", "application/json");
+            myHeaders.append("Content-type", "application/json");
     
-        map.on('click', function (event) {
-            var point = map.getCoordinateFromPixel(event.pixel);
-            var lonLat = ol.proj.toLonLat(point);
-            if (point_type == 'from' || point_type == 'to') {
-                bootstrap.Modal.getInstance(document.getElementById('planJourneyModal')).show();
-            }
+            const myBody = JSON.stringify({nick: floatingNick, email: floatingInput, password: floatingPassword});
     
-            if (point_type == 'from') {
-                document.getElementById("fromInput").value = lonLat;
+            const myOptions = {method: "POST", headers: myHeaders, body: myBody,};
     
-                if (vectorLayerFrom != null)
-                    map.removeLayer(vectorLayerFrom);
-    
-                var featureCircle = new ol.Feature({
-                    geometry: new ol.geom.Point(point),
-                    name: 'From',
-                });
-    
-                var vectorCircle = new ol.source.Vector({});
-                vectorCircle.addFeature(featureCircle);
-    
-                vectorLayerFrom = new ol.layer.Vector({
-                    source: vectorCircle,
-                    style: new ol.style.Style({
-                        image: new ol.style.Circle({
-                            radius: 6,
-                            fill: new ol.style.Fill({
-                                color: '#FF00CC'
-                            })
-                        })
-                    })
-                });
-                map.addLayer(vectorLayerFrom);
-            }
-            if (point_type == 'to') {
-                document.getElementById("toInput").value = lonLat;
-    
-                if (vectorLayerTo != null) {
-                    map.removeLayer(vectorLayerTo);
+            const myRequest = new Request("http://localhost/backend/user/signup", myOptions);
+            fetch(myRequest).then((response) => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error, status = ${response.status}`);
                 }
-    
-                var featureCircle = new ol.Feature({
-                    geometry: new ol.geom.Point(point),
-                    name: 'To',
-                });
-    
-                var vectorCircle = new ol.source.Vector({});
-                vectorCircle.addFeature(featureCircle);
-    
-                vectorLayerTo = new ol.layer.Vector({
-                    source: vectorCircle,
-                    style: new ol.style.Style({
-                        image: new ol.style.Circle({
-                            radius: 6,
-                            fill: new ol.style.Fill({
-                                color: '#00FFFF'
-                            })
-                        })
-                    })
-                });
-    
-                map.addLayer(vectorLayerTo);
-    
-            }
-            point_type = null;
+                return response.text();
+            }).then((text) => {
+                let retObj = JSON.parse(text);
+                if (retObj.login) {
+                    //TODO
+                }
+            }).catch((error) => {
+                var p = document.createElement("p");
+                p.appendChild(document.createTextNode(`Error: ${error.message}`));
+                document.body.innerHTML = "";
+                document.body.appendChild(p);
+            });
         })
     </script>
 
+### Aktivita Validace hodnot formulářových prvků (frondend)
+Validace je činnost, kdy ověřujeme zda zadané hodnoty jsou v souladu s definovanými pravidly. Napříkald zkontrolujeme, zda:
 
-Na straně backendu si upravíme routu /journey/find. Pro jednoduchost sestavíme trasu z úseků:
-    * FROM - první zastávka linky 5
-    * první zastávka linky 5 - poslední zastávka linky 5
-    * poslední zastávka linky 5 - TO 
+* Nick je dlouhý min dva znaky
+* Email obsahuje @
+  * Heslo je dlohé alespoň 6 znaků, musí obsahovat alespoň jedno malé písmeno, jedno velké písmeno, jedno číslo
 
-    var body = '';  
-    req.on('data', chunk => {
-        body += chunk.toString(); 
+    
+    var error = {};
+
+    let nickValid, emailValid, passwordValid;
+    nickValid = emailValid = passwordValid = true;
+
+    if (floatingNick.length <2)
+        error.floatingNick = "Nick must be at least 2 characters";
+
+    if (!floatingInput.includes("@"))
+        error.floatingInput = "Email address must contain a single @";
+
+    let pattern = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).{6,}$/;
+    if (!pattern.test(floatingPassword))
+        error.floatingPassword = "Password must contain uppercase, lowercase, number and must be least 2 characters";
+
+    if (Object.keys(error).length >0 ) {
+        //TODO show error
+    } else {
+        ...
+    }
+
+### Aktivita Zobrazení chyb v zadaných hodnotách
+Přidáme si prvky pro zobrazování chyb do html kódu.
+
+    <div class="form-floating mb-3">
+        <input type="text" class="form-control" id="floatingNick" placeholder="Tonda 568" required>
+        <div id="floatingNickInvalidFeedback" class="invalid-feedback" style="display: none"></div>
+        <label for="floatingNick">Nick</label>
+    </div>
+    <div class="form-floating mb-3">
+        <input type="email" class="form-control" id="floatingInput" placeholder="name@example.com">
+        <div id="floatingInputInvalidFeedback" class="invalid-feedback" style="display: none">a</div>
+        <label for="floatingInput">Email address</label>
+    </div>
+    <div class="form-floating mb-3">
+        <input type="password" class="form-control" id="floatingPassword" placeholder="Password">
+        <div id="floatingPasswordInvalidFeedback" class="invalid-feedback" style="display: none">a</div>
+        <label for="floatingPassword">Password</label>
+    </div>
+
+Pridáme si JavaScript kód pro obsluhu zobrazení chyb.
+
+    document.getElementById("floatingNick").addEventListener('input', function (){
+    this.classList.remove("is-invalid");
+    document.getElementById("floatingNickInvalidFeedback").style.display = "none";
+    document.getElementById("floatingNickInvalidFeedback").textContent= "";
     });
-    req.on('end', () => {
+
+    document.getElementById("floatingInput").addEventListener('input', function (){
+        this.classList.remove("is-invalid");
+        document.getElementById("floatingInputInvalidFeedback").style.display = "none";
+        document.getElementById("floatingInputInvalidFeedback").textContent= "";
+    });
+
+    document.getElementById("floatingPassword").addEventListener('input', function (){
+        this.classList.remove("is-invalid");
+        document.getElementById("floatingPasswordInvalidFeedback").style.display = "none";
+        document.getElementById("floatingPasswordInvalidFeedback").textContent= "";
+    });
+
+A v případě výskytu chyby, chybu zobrazíme.
+
+
+    if (typeof error.floatingNick != 'undefined') {
+        document.getElementById("floatingNick").classList.add("is-invalid");
+        document.getElementById("floatingNickInvalidFeedback").style.display = "block";
+        document.getElementById("floatingNickInvalidFeedback").textContent= error.floatingNick;
+    }
+    if (typeof error.floatingInput != 'undefined') {
+        document.getElementById("floatingInput").classList.add("is-invalid");
+        document.getElementById("floatingInputInvalidFeedback").style.display = "block";
+        document.getElementById("floatingInputInvalidFeedback").textContent= error.floatingInput;
+    }
+    if (typeof error.floatingPassword != 'undefined') {
+        document.getElementById("floatingPassword").classList.add("is-invalid");
+        document.getElementById("floatingPasswordInvalidFeedback").style.display = "block";
+        document.getElementById("floatingPasswordInvalidFeedback").textContent= error.floatingPassword;
+    }
+
+
+### Odeslání dotazu na adresu /signup
+Viz krok "Aktivita Odeslání formuláře"
+
+### Aktivita Validace hodnot formulářových prvků (backend)
+Na backendu je validace chyb stejná jako na frondendu.
+
+### Aktivita Zavedení nového uživatele do DB
+
+1. Otestujeme, zda již není email uživatele v databázi zaveden.
+2. Pokud email v databázi neexistuje, vygenerujeme unikátní kód, který bude odeslán klientovi na email k ověření a tento kód spolu s novým uživatelem zavedeme do databáze. Je dobré, aby platnost kódu byla omezena (např. 2 hodiny). 
+
+### Aktivita Odeslání seznamu chyb v zadaných hodnotách
+Vygeneruji response.
+
+### Aktivita Odeslání zprávy o úspěšném vytvoření účtu
+Vygeneruji response.
+
+### Aktivita Odeslání emailu klientovi o úspěšném vytvoření účtu
+Nejdříve se seznámíme s mailováním v nodu (viz kapitola Mailování v Nodu)
+
+### Aktivita Zobrazení zprávy o úspěšném vytvoření účtu
+Zobrazím uživateli zprávu. 
+
+### Vytvoření stránky activate_account.html
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <title>Activate account</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="css/bootstrap.css">
+        <link rel="stylesheet" href="css/styles.css">
+    </head>
+    <body>
+    <script src="js/bootstrap.js"></script>
+    <script src="js/app.js"></script>
+    </body>
+    </html>
+
+## Aktivita Odeslání dotazu na adresu /activate_account
+Po zobrazení stránky se zobrazí loader a odešle se dotaz na server s kódem, který je v query stringu odkazu.
+
+### Aktivita Aktivování uživatelského účtu
+Zjistíme, zda tento kód je zaveden v DB a čeká na aktivaci a zda je stále platný. 
+
+### Aktivita Sestavení a odeslání výsledku aktivace
+Vygeneruji response.
+
+### Zobrazení výsledku aktivace účtu
+Na stránce /activate_account.html vypnu loader a zobrazím výsledek aktivace, který mi byl zaslán v odpovědi.
+
+
+
+## Mailování v Nodu
+### SMTP server Mailtrap
+Testování zasílání mailů můžeme provádět pomocí služby Mailtrap, která poskytuje falešný SMTP server.
+Mailtrap funguje tak, že vytvoří dočasný SMTP server, který je přístupný prostřednictvím jedinečného názvu hostitele a čísla portu.
+
+1. Ve službě Mailtrap https://mailtrap.io/ si vytvoříme účet.
+2. Vybereme E-mail testing a v Setting inboxu si nastavíme "Integrations: Nodemailer" a získáme tajné přihlašovací údaje.
+
+
+## Odesílání emailů pomocí Nodemaileru
+Nainstalujeme si Nodemailer https://www.nodemailer.com/.
+
+    {publicloop_root}/app/backend/npm install nodemailer
+
+V backendu apliace si vytvoříme transporter Nodemaileru. V souboru {publicloop_root}/app/backend/index.js si přidáme následující zdrojový kód.
+
+    const nodemailer = require('nodemailer');
+    
+    var transporter = nodemailer.createTransport({
+    host: "sandbox.smtp.mailtrap.io",
+    port: 2525,
+    auth: {
+        user: "ecf0e8a2d33207",
+        pass: "**********20c5"
+    }
+    });
+
+Dále si do souboru {publicloop_root}/app/backend/index.js přidáme funkci pro odeslání mailu sendMail.
+
+    async function sendMail(from, to, subject, text, html) {
+        return await transporter.sendMail({
+          from: from,
+          to: to,
+          subject: subject,
+          text: text,
+          html: html
+      });
+    }
+
+Nyní si přidáme routu /mail/send pro otestování funkčnosti.
+
+    case '/mail/send':
+        var from = '"Lukáš Čegan" <lukas.cegan@upce.cz>';
+        var to = "hello@world.com, ahoj@svete.cz";
+        var subject = "Hello, Ahoj";
+        var text = "Hello world. Ahoj světe.";
+        var html = "<p>Hello world. Ahoj světe.</p>";
+
+        sendMail(from, to, subject, text, html).then((messageId) => {
+            var resData = {messageId: messageId};
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Set-Cookie', session_cookie);
+            res.end(JSON.stringify(resData));
+        }).catch(console.error)
+    break;
 
-            let reqData = JSON.parse(body);
-            let active = reqData.active;
-            let arrive = reqData.arrive;
-            let depart = reqData.depart;
-            let from = reqData.from;
-            let to = reqData.to;
+Zadáme adresu adresu http://localhost:3000/mail/send a následně zkontrolujeme v mailboxu mailtrap.io, že jsme email obdrželi.  
+Na výstupu bychom měli obdržet info zprávy.
 
-            from = from.split(','); //15 50
-            to = to.split(',');
-
-            var dist = getDistance([50.0210234, 15.7587522], [from [1], from[0]]);
-
-            var section_from = {
-                type: 1,
-                type_name: "walk",
-                from: {latitude: parseFloat(from[0]), longitude: parseFloat(from[1]), date: depart},
-                to: {latitude: 15.7587522, longitude: 50.0210234, date: depart},
-                distance: dist,
-                line: []
-            };
-
-            dist = getDistance([50.0470595, 15.8114271], [to [1], to[0]]);
-            var section_to = {
-                type: 1,
-                type_name: "walk",
-                from: {latitude: 15.8114271, longitude: 50.0470595, date: depart},
-                to: {latitude: parseFloat(to[0]), longitude: parseFloat(to[1]), date: depart},
-                distance: dist,
-                line: []
-            };
-
-            var connection = getConn();
-            connection.query(
-                'select l.line_name, ls.direction, ls.order, s.stop_name, s.latitude, s.longitude\n' +
-                'from `lines` l\n' +
-                'inner join line_stops ls on l.line_key = ls.line_key\n' +
-                'inner join stops s on ls.stop_key = s.stop_key\n' +
-                'where l.line_name = ? and ls.direction = ?\n' +
-                'order by ls.order',
-                ['5', '1'],
-                function (err, results) {
-                    if (err) {
-                        res.statusCode = 500;
-                        res.setHeader('Content-Type', 'text/plain');
-                        res.end('Internal Server Error');
-                    } else {
-
-                        var resData = {meta:[], sections:[]};
-                        resData.sections.push(section_from);
-
-                        var line_path = [];
-                        results.forEach(function (item) {
-                            line_path.push(
-                                {
-                                    line_name: item.line_name,
-                                    direction: item.direction,
-                                    order: item.order,
-                                    stop_name: item.stop_name,
-                                    latitude: item.latitude,
-                                    longitude: item.longitude
-                                });
-                        });
-
-                        dist = getDistance([50.0210234, 15.7587522], [50.0470595, 15.8114271]);
-                        resData.sections.push({
-                            type: 2,
-                            type_name: "bus",
-                            from: {latitude: 15.7587522, longitude: 50.0210234, date: depart},
-                            to: {latitude: 15.8114271, longitude: 50.0470595, date: depart},
-                            distance: dist,
-                            line: line_path
-                        });
-
-                        resData.sections.push(section_to);
-                        res.statusCode = 200;
-                        res.setHeader('Content-Type', 'application/json');
-                        res.setHeader('Set-Cookie', session_cookie);
-                        res.end(JSON.stringify(resData));
-                    }
-                }
-            )
-        }
-    )
-
-A přídáme si funkci getDistance().
-
-    function getDistance(coords1, coords2) {
-        function toRad(x) {
-            return x * Math.PI / 180;
-        }
-    
-        var lon1 = coords1[0];
-        var lat1 = coords1[1];
-    
-        var lon2 = coords2[0];
-        var lat2 = coords2[1];
-    
-        var R = 6371; // km
-    
-        var x1 = lat2 - lat1;
-        var dLat = toRad(x1);
-        var x2 = lon2 - lon1;
-        var dLon = toRad(x2)
-        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        var d = R * c;
-    
-        return d;
-    }
-
-V mapě vykreslíme vyhledanou trasu. Po obdržení dat zavoláme funkci drawSections(text).
-
-    fetch('http://localhost/backend/journey/find', {
-        method: "POST",
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(plan_data)
-    })
-    .then((response) => {
-        if (!response.ok) {
-            throw new Error(`HTTP error, status = ${response.status}`);
-        }
-        return response.text();
-    })
-    .then((text) => {
-        document.getElementById("loader").style.display = 'none';
-        drawSections(text);
-    })
-    .catch(error => {
-        //TODO handle error
-    })
-
-A funkci drawSections si vytvoříme.
-
-    <script>
-        function drawSections(data) {
-            const resdata = JSON.parse(data);
-            const sections = resdata.sections;
-            for (let section of resdata.sections) {
-                switch (section.type) {
-                case 1:
-                    var coords = [];
-                    coords.push(ol.proj.fromLonLat([section.from.latitude, section.from.longitude]));
-                    coords.push(ol.proj.fromLonLat([section.to.latitude, section.to.longitude]));
-                    drawLines(coords, '#c800ff');
-                    break
-                case 2:
-                    var coords = [];
-                    for (let point of section.line)
-                        coords.push(ol.proj.fromLonLat([point.latitude, point.longitude]));
-                    drawLines(coords, '#0000FF');
-                    break;
-                }
-            }
-        }
-        var journeyLayers = [];
-    
-        function drawLines(coords, color) {
-    
-            var featureLine = new ol.Feature({
-                geometry: new ol.geom.LineString(coords),
-                name: 'Line'
-            });
-    
-            var vectorLine = new ol.source.Vector({});
-            vectorLine.addFeature(featureLine);
-    
-            journeyLayer = new ol.layer.Vector({
-                source: vectorLine,
-                style: new ol.style.Style({
-                    fill: new ol.style.Fill({color: color, weight: 4}),
-                    stroke: new ol.style.Stroke({color: color, width: 4})
-                })
-            });
-            journeyLayers.push(journeyLayer);
-            map.addLayer(journeyLayer);
-    
-        }
-    </script>
-
-Ještě si přidáme funkci pro vymazání mapy.
-
-    <script>
-        function clearMap() {
-            if (vectorLayerFrom != null) {
-                map.removeLayer(vectorLayerFrom);
-                document.getElementById("fromInput").value = '';
-            }
-            if (vectorLayerTo != null) {
-                map.removeLayer(vectorLayerTo);
-                document.getElementById("toInput").value = '';
-            }
-            if (journeyLayers != []) {
-                for (let journeyLayer of journeyLayers)
-                map.removeLayer(journeyLayer);
-            }
-        }
-    </script>
-
-A tu si zavoláme vždy, když v menu vybereme tlačítko "Plan journey".
-
-    <script>
-        document.getElementById("planJourney").addEventListener('click', function (event) {
-           
-            ...
-    
-            clearMap();
-        })
-    </script>
-
-Pro získání a import dat jednotlivých časů odjezdů a příjezdů autobusů si vytvoříme webscraper. 
-
-## Webscraper
-Pro stažení dat do našeho projektu si vytvoříme malý webscraper, kterým budeme postupně procházet stránky dopravního podniku a data si ukládat do databáze.
-
-### Datová vrstva pro import dat
-Vytvoříme si vytvoříme potřebné tabulky pro import dat v datovém modeleru MySQL Workbench. SQL dotazy si následně spustíme na MariaDB.
-
-    CREATE TABLE IF NOT EXISTS `publicloop`.`imp_batch` (
-        `impbatch_key` INT NOT NULL AUTO_INCREMENT,
-        `impbatch_start` DATETIME NOT NULL,
-        `impbatch_finish` DATETIME,
-        `impbatch_log` LONGTEXT NULL,
-        PRIMARY KEY (`impbatch_key`))
-    ENGINE = InnoDB;
-    
-    CREATE TABLE IF NOT EXISTS `publicloop`.`imp_lines` (
-        `impline_key` INT NOT NULL AUTO_INCREMENT,
-        `impline_name` VARCHAR(255) NOT NULL,
-        `impline_url` VARCHAR(255) NOT NULL,
-        `impbatch_key` INT NOT NULL,
-        PRIMARY KEY (`impline_key`),
-        INDEX `fk_imp_lines_imp_batch1_idx` (`impbatch_key` ASC) VISIBLE,
-        CONSTRAINT `fk_imp_lines_imp_batch1`
-        FOREIGN KEY (`impbatch_key`)
-            REFERENCES `publicloop`.`imp_batch` (`impbatch_key`)
-                ON DELETE NO ACTION
-                ON UPDATE NO ACTION)
-    ENGINE = InnoDB;
-
-    CREATE TABLE IF NOT EXISTS `publicloop`.`imp_stops` (
-        `impstop_key` INT NOT NULL  AUTO_INCREMENT,
-        `impstop_name` VARCHAR(255) NOT NULL,
-        `impstop_url` VARCHAR(255) NOT NULL,
-        `impstop_direction` INT NULL,
-        `impstop_order` VARCHAR(255) NOT NULL,
-        `impline_key` INT NOT NULL,
-        PRIMARY KEY (`impstop_key`),
-        INDEX `fk_imp_stops_imp_lines1_idx` (`impline_key` ASC) VISIBLE,
-        CONSTRAINT `fk_imp_stops_imp_lines1`
-        FOREIGN KEY (`impline_key`)
-            REFERENCES `publicloop`.`imp_lines` (`impline_key`)
-                ON DELETE NO ACTION
-                ON UPDATE NO ACTION)
-    ENGINE = InnoDB;
-
-    CREATE TABLE IF NOT EXISTS `publicloop`.`imp_departures` (
-        `impdeparture_key` INT NOT NULL AUTO_INCREMENT,
-        `impstop_key` INT NOT NULL,
-        `departure` TIME NOT NULL,
-        `valid_from` DATE NULL,
-        `valid_to` DATE NULL,
-        `impdeparture_type` VARCHAR(255) NULL,
-        PRIMARY KEY (`impdeparture_key`),
-        INDEX `fk_imp_departures_imp_stops1_idx` (`impstop_key` ASC) VISIBLE,
-        CONSTRAINT `fk_imp_departures_imp_stops1`
-        FOREIGN KEY (`impstop_key`)
-            REFERENCES `publicloop`.`imp_stops` (`impstop_key`)
-                ON DELETE NO ACTION
-                ON UPDATE NO ACTION)
-    ENGINE = InnoDB;
-    
-    CREATE TABLE IF NOT EXISTS `publicloop`.`imp_departure_params` (
-        `impdepartureparam_key` INT NOT NULL AUTO_INCREMENT,
-        `impdeparture_key` INT NULL,
-        `param_code` VARCHAR(255) NOT NULL,
-        `param_name` VARCHAR(255) NOT NULL,
-        PRIMARY KEY (`impdepartureparam_key`),
-        INDEX `fk_imp_departure_params_imp_departures1_idx` (`impdeparture_key` ASC) VISIBLE,
-        CONSTRAINT `fk_imp_departure_params_imp_departures1`
-        FOREIGN KEY (`impdeparture_key`)
-            REFERENCES `publicloop`.`imp_departures` (`impdeparture_key`)
-                ON DELETE NO ACTION
-                ON UPDATE NO ACTION)
-    ENGINE = InnoDB;
         
-    CREATE TABLE IF NOT EXISTS `publicloop`.`imp_departure_exclude`
-    (
-        `impdepartureexclude_key` INT  NOT NULL AUTO_INCREMENT,
-        `impdeparture_key`        INT  NOT NULL,
-        `exclude_from`            DATE NOT NULL,
-        `exclude_to`              DATE NOT NULL,
-        PRIMARY KEY (`impdepartureexclude_key`),
-        INDEX `fk_imp_departure_exclude_imp_departures1_idx` (`impdeparture_key` ASC) VISIBLE,
-        CONSTRAINT `fk_imp_departure_exclude_imp_departures1`
-        FOREIGN KEY (`impdeparture_key`)
-            REFERENCES `publicloop`.`imp_departures` (`impdeparture_key`)
-                ON DELETE NO ACTION
-                ON UPDATE NO ACTION)
-    ENGINE = InnoDB;
+## Vytváření šablon pomocí Mailgen
+Mailgen https://github.com/eladnava/mailgen je prostředek pro vytváření HTML šablon pro transakční e-maily. 
+Mailgen si nainstalujemen.
 
-### Zdrojový kód webscraperu
-Do našeho projektu si doinstalujeme balíček jsdom.
+    {publicloop_root}/app/backend/npm install mailgen
 
-    npm install jsdom
+Mailgen si naimportujeme a nakonfigurujeme. 
 
-Následně si vytvoříme nový soubor {publicloop_root}/app/backend/scraper.js s níže uvedeným zdrojovým kódem.
+    var Mailgen = require('mailgen');
+    // Configure mailgen by setting a theme and your product info
+    var mailGenerator = new Mailgen({
+        theme: 'default',
+        product: {
+            // Appears in header & footer of e-mails
+            name: 'Mailgen',
+            link: 'https://mailgen.js/'
+            // Optional product logo
+            // logo: 'https://mailgen.js/img/logo.png'
+        }
+    });
 
-    zdrojový kód viz soubor scraper.js
+A dále si vygenerujeme email.
+
+    var email = {
+      body: {
+          name: 'Lukáš Čegan',
+          intro: 'Welcome to Publicloop! We\'re very excited to have you on board.',
+          action: {
+              instructions: 'To get started with Publicloop, please click here:',
+              button: {
+                  color: '#22BC66',
+                  text: 'Confirm your account',
+                  link: 'https://mailgen.js/confirm?s=d9729feb74992cc3482b350163a1a010'
+              }
+          },
+          outro: 'Need help, or have questions? Just reply to this email, we\'d love to help.'
+      }
+  };
+    
+    var emailBody = mailGenerator.generate(email);
+    var emailText = mailGenerator.generatePlaintext(email);
+    
+    // Můžeme si vygenerovat náhled emailu a uložit na disk
+    const preview_file = path.resolve(__dirname, '..', 'tmp_emails/preview.html');
+    require('fs').writeFileSync( preview_file, emailBody, 'utf8');
+    
+Email nyní můžeme odeslat např. pomocí Nodemailer (viz výše).
+
+    var from = '"Publicloop" <info@publicloop.com>';
+    var to = "new.user@domain.com";
+    var subject = "Confirm your account!";
+
+    var mailGenerator = new Mailgen({
+        theme: 'default',
+        product: {
+            name: 'Publicloop',
+            link: 'https://publicloop.com/'
+        }
+    });
+
+    var email = {
+        body: {
+            name: 'Lukáš Čegan',
+            intro: 'Welcome to Publicloop! We\'re very excited to have you on board.',
+            action: {
+                instructions: 'To get started with Publicloop, please click here:',
+                button: {
+                    color: '#22a0bc',
+                    text: 'Confirm your account',
+                    link: 'https://publicloop.com/confirm?s=jhfad65d4f35asd4f3as4d35f4asd3f'
+                }
+            },
+            outro: 'Need help, or have questions? Just reply to this email, we\'d love to help.'
+        }
+    };
+    var emailBody = mailGenerator.generate(email);
+    var emailText = mailGenerator.generatePlaintext(email);
+
+    // Můžeme si vygenerovat náhled emailu a uložit na disk
+    const preview_file = path.resolve(__dirname, '..', 'tmp_emails/preview.html');
+    require('fs').writeFileSync( preview_file, emailBody, 'utf8');
+
+    sendMail(from, to, subject, emailText, emailBody).then((messageId) => {
+        var resData = {messageId: messageId};
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Set-Cookie', session_cookie);
+        res.end(JSON.stringify(resData));
+    }).catch(console.error)
+
+## DotEnv
+
+    {publicloop_root}/app/backend/npm install dotenv
+
+V adresáři backend vytvoříme soubor.env
+
+    {publicloop_root}/app/backend/.env
+
+Do toho souboru vložíme přihlašovací údaje.
+
+    USER=<mailtrap user key>
+    PASSWORD=<mailtrap password>
+
+A nyní můžeme upravit soubor {publicloop_root}/app/backend/index.js a načítat přihlašovací údaje z proměnných.
+
+    var dotenv = require('dotenv');
+    dotenv.config();
+
+    const transporter = nodemailer.createTransport({
+    host: 'smtp.mailtrap.io',
+    port: 2525,
+    auth: {
+        user: process.env.USER, 
+        pass: process.env.PASSWORD, 
+    }
+    });
+
+> Soubor .env je dobré zařadit do souboru .gitignore, aby tento soubor byl verzovacím systémem ignorován.
+ 
+ 
